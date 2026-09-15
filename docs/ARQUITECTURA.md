@@ -37,6 +37,40 @@ La transferencia cruza dos "cuentas" que viven en el mismo `account-service`, pe
 
 Nota de diseño: dado que en la topología actual solo `account-service` posee ambas cuentas, esta saga es más compleja que resolver el débito+crédito como una única transacción Mongo local — se adopta igualmente por el objetivo declarado de practicar el patrón saga/Kafka.
 
+### Esquema de eventos (payloads)
+
+Todos los eventos llevan `transactionId` como clave de partición Kafka (garantiza orden por transacción) y `sourceAccountId`/`targetAccountId` para que `account-service` sepa sobre qué documento operar.
+
+**Topic `debit-events`**
+```json
+// evento: DebitRequested (producido por transfer-service)
+{ "eventType": "DebitRequested", "transactionId": "uuid", "sourceAccountId": "acc-101", "amount": 150, "timestamp": "..." }
+```
+`account-service` responde publicando en el mismo topic (o uno de resultado dedicado — decisión de implementación en Fase 1/2, ambos válidos):
+```json
+{ "eventType": "DebitSucceeded", "transactionId": "uuid" }
+// o
+{ "eventType": "DebitFailed", "transactionId": "uuid", "reason": "INSUFFICIENT_BALANCE" | "SOURCE_INACTIVE" }
+```
+
+**Topic `credit-events`**
+```json
+{ "eventType": "CreditRequested", "transactionId": "uuid", "targetAccountId": "acc-202", "amount": 150, "timestamp": "..." }
+```
+Respuestas: `CreditSucceeded` / `CreditFailed` con `reason: "TARGET_INACTIVE" | "TARGET_NOT_FOUND"`.
+
+**Topic `transfer-compensation`**
+```json
+{ "eventType": "CompensateDebit", "transactionId": "uuid", "sourceAccountId": "acc-101", "amount": 150 }
+```
+`account-service` revierte el débito (crédito de vuelta) y confirma con `CompensationApplied`.
+
+### Idempotencia y consistencia eventual
+
+- Cada evento incluye `transactionId` único; `account-service` debe tratar el procesamiento de un mismo `transactionId` como idempotente (si Kafka reentrega el mensaje por un rebalance, no debe debitar/acreditar dos veces). Se logra guardando `lastProcessedTransactionId` por operación, o verificando el estado antes de aplicar el cambio.
+- El sistema es **eventualmente consistente**: entre que `transfer-service` responde `202 Accepted` y la saga se resuelve, el saldo de las cuentas puede no reflejar aún el resultado final. El cliente debe consultar el estado de la `Transaction` para conocer el resultado definitivo.
+- Si `account-service` cae después de aplicar un débito pero antes de publicar `DebitSucceeded`, al reiniciar debe re-publicar el evento pendiente (outbox pattern) o, para el alcance de este ejercicio, aceptar que Kafka garantiza at-least-once y que el consumidor de `transfer-service` maneja duplicados por `transactionId`.
+
 ## Seguridad
 
 - **Keycloak** como Identity Provider (realm `loyalty-realm`, roles `USER`/`ADMIN`, client `loyalty-app`).
@@ -101,3 +135,80 @@ API_Fidelizacion/
 - Saga coreografiada con Kafka para dos cuentas que viven en el mismo servicio es sobre-ingeniería intencional (fin de práctica), no la solución más simple posible.
 - Keycloak en `start-dev` y client secret hardcodeado: aceptable solo para entorno de práctica/desarrollo, no producción.
 - Sin distributed tracing (Zipkin/Sleuth) en el alcance actual — se podría agregar en una fase futura si se quiere observabilidad end-to-end de la saga.
+- Consistencia eventual: existe una ventana de tiempo entre `202 Accepted` y la resolución final de la saga donde el estado no es determinista para el cliente sin hacer polling.
+
+## Decisiones y alternativas descartadas
+
+Registro completo de cada decisión tomada durante el diseño, con su justificación y lo que se descartó. Sirve como bitácora para entender *por qué* la arquitectura terminó así y no de otra forma.
+
+### D1 — Alcance real del ejercicio
+**Decisión:** práctica personal, no evaluación técnica externa (EPAM/NEORIS) real.
+**Por qué importa:** habilita alejarse del enunciado original (que pedía JPA + Postgres + un único endpoint monolítico) en favor de maximizar aprendizaje sobre Mongo, Keycloak, Kafka y microservicios. Si fuera evaluación real, se habría recomendado ceñirse literalmente al enunciado (Postgres + JPA + monolito) para maximizar el puntaje.
+
+### D2 — Motor de persistencia: MongoDB vs. PostgreSQL/MySQL
+**Decisión:** MongoDB.
+**Alternativas descartadas:** PostgreSQL (recomendado inicialmente por ceñirse al enunciado, que menciona JPA/`@Transactional`), MySQL.
+**Trade-off aceptado:** Mongo exige replica set (no standalone) para transacciones ACID multi-documento, agregando complejidad de infraestructura que Postgres no tendría. Se acepta porque el objetivo es practicar Mongo.
+
+### D3 — Estrategia de concurrencia en operaciones de saldo
+**Decisión:** update atómico condicional (`findOneAndUpdate` con filtro `balance >= amount`), equivalente Mongo-idiomático a un lock.
+**Alternativas descartadas:**
+- *Locking pesimista relacional* (`SELECT ... FOR UPDATE`) — no existe como primitiva en Mongo.
+- *Locking optimista con `@Version` + retry* — válido en Mongo también, pero el update condicional atómico es más simple y no requiere lógica de reintento.
+- *Sin control explícito* — descartado siempre: bajo `READ_COMMITTED` (o el equivalente en Mongo) permite condiciones de carrera que dejan saldo negativo.
+
+### D4 — Estado de la cuenta origen
+**Decisión:** ambas cuentas (origen y destino) deben estar `ACTIVE` para poder transferir.
+**Alternativa descartada:** ceñirse literalmente al enunciado, que solo exige estado activo en la cuenta destino.
+**Razón:** una cuenta inactiva no debería poder enviar puntos tampoco; es más consistente como regla de negocio real.
+
+### D5 — Creación/inicialización de cuentas
+**Decisión:** exponer endpoints completos de gestión de cuentas (`POST/GET/PATCH /accounts`, `GET /accounts/{id}/transactions`).
+**Alternativa descartada:** seed script sin endpoint público de creación (más ceñido al enunciado original, que no pedía CRUD de cuentas).
+**Razón:** el usuario pidió explícitamente que el sistema sea "completo", incluyendo creación de cuenta y bloqueo.
+
+### D6 — Gestión de usuarios
+**Decisión:** sí se requiere capa de usuario con registro/login real (no solo cuentas sin autenticación propia).
+**Alternativa descartada:** modelo "solo cuentas", donde el owner se resuelve simplemente comparando el JWT contra `sourceAccountId` sin un sistema de registro dedicado.
+
+### D7 — Mecanismo de autenticación
+**Decisión:** OAuth2/Keycloak externo como Identity Provider.
+**Alternativa descartada:** JWT propio emitido por el servicio (Spring Security + `jjwt`) — más simple, sin infraestructura adicional, pero no practica un IdP real como Keycloak.
+
+### D8 — Relación usuario–cuenta
+**Decisión:** 1 usuario puede tener N cuentas (creadas explícitamente vía `POST /accounts`).
+**Alternativa descartada:** 1 usuario = 1 cuenta creada automáticamente al registrarse (más simple, menos modelo/validación).
+
+### D9 — Arquitectura de servicio: monolito modular vs. microservicios
+**Decisión:** microservicios separados (`account-service`, `transfer-service`, luego `auth-service`, `gateway`, `eureka-server`).
+**Alternativa descartada (era la recomendada):** monolito modular — un solo servicio Spring Boot con paquetes por dominio (`account`, `transfer`, `config`). Se descartó porque el usuario quería practicar el patrón de microservicios y sus problemas asociados (comunicación de red, saga, discovery).
+**Consecuencia directa:** la atomicidad de la transferencia ya no puede resolverse con una transacción Mongo local simple — obliga a diseñar una saga (ver D10) y hace que `/transfer` deje de ser síncrono (ver D12 implícita en el cambio de código de respuesta).
+
+### D10 — Patrón de consistencia distribuida: saga orquestada vs. coreografiada
+**Decisión:** saga **coreografiada** basada en eventos Kafka.
+**Alternativa descartada (era la recomendada):** saga orquestada síncrona vía REST con compensación explícita desde `transfer-service` — más simple de depurar (llamadas REST directas, stack traces claros) pero menos representativa de un sistema event-driven real.
+**Trade-off aceptado:** mayor complejidad operativa (necesita broker, manejo de idempotencia, consistencia eventual) a cambio de practicar el patrón de mensajería asíncrona.
+
+### D11 — Broker de mensajería: Kafka vs. RabbitMQ
+**Decisión:** Kafka en modo KRaft (sin Zookeeper).
+**Alternativa descartada:** RabbitMQ — más simple de operar para un flujo de saga pequeño, pero Kafka es el estándar más demandado en el mercado y el objetivo es practicarlo.
+
+### D12 — Service discovery y punto de entrada
+**Decisión:** Eureka Server + Spring Cloud Gateway.
+**Alternativa descartada (era la recomendada):** comunicación directa por nombre de servicio en la red de Docker Compose (`http://account-service:8081`), sin gateway ni discovery — suficiente técnicamente para 2-3 servicios, pero no practica el patrón de descubrimiento dinámico ni un punto de entrada único como en un entorno enterprise real.
+
+### D13 — Servicios finales del sistema
+**Decisión:** `account-service` + `transfer-service` + `auth-service` propio (fachada de Keycloak), más `gateway` y `eureka-server` como infraestructura de plataforma.
+**Alternativa descartada:** solo `account-service` + `transfer-service`, sin `auth-service` dedicado (cada servicio de negocio validaría el JWT directamente sin fachada de registro).
+
+### D14 — Identificadores de negocio
+**Decisión:** IDs de negocio propios (`acc-xxxx`) como `_id` de Mongo.
+**Alternativa descartada:** `ObjectId` nativo de Mongo expuesto como string en la API — más idiomático de Mongo pero rompe compatibilidad con el formato de ejemplo del enunciado original (`acc-101`).
+
+### D15 — Cobertura de testing
+**Decisión:** cobertura total (unitarias, integración, end-to-end) con Testcontainers contra Mongo y Kafka reales.
+**Alternativa descartada:** cobertura mínima literal del enunciado original (1 test unitario de saldo insuficiente + 1 test de integración de validación de `amount`).
+
+### D16 — Estructura de repositorio y build tool
+**Decisión:** monorepo Maven multi-módulo.
+**Alternativas descartadas:** multi-repo (uno por servicio) — más realista en enterprise pero mucho overhead de gestión para este ejercicio; Gradle multi-módulo (recomendado por build más rápido y sintaxis moderna) — descartado a favor de Maven, más común en entornos EPAM/NEORIS legacy y el que el usuario ya conoce.
