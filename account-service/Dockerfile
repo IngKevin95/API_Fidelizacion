@@ -6,6 +6,7 @@ COPY account-service/pom.xml account-service/pom.xml
 COPY transfer-service/pom.xml transfer-service/pom.xml
 COPY auth-service/pom.xml auth-service/pom.xml
 COPY gateway/pom.xml gateway/pom.xml
+COPY e2e-tests/pom.xml e2e-tests/pom.xml
 COPY account-service/src account-service/src
 RUN mvn -q -pl account-service -am -DskipTests package
 

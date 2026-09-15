@@ -11,6 +11,7 @@ keycloak:
   admin-client-id: loyalty-app
   admin-client-secret: loyalty-app-dev-secret
   login-client-id: loyalty-app
+  login-client-secret: loyalty-app-dev-secret
 
 eureka:
   client:

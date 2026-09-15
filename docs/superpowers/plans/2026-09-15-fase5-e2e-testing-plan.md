@@ -967,4 +967,16 @@ git commit -m "test: agrega E2E-3 compensacion como verificacion de invariante (
 
 ## Nota operativa
 
-Todos los tests de este módulo requieren `docker-compose up -d --build` corriendo (Task 1) — no se ejecutan como parte de `mvn clean install` del monorepo (`maven.test.skip=true` por defecto en `e2e-tests/pom.xml`). Se ejecutan explícitamente: `mvn -pl e2e-tests test -DskipTests=false`.
+Todos los tests de este módulo requieren `docker-compose up -d --build` corriendo (Task 1) — no se ejecutan como parte de `mvn clean install` del monorepo (`maven.test.skip=true` por defecto en `e2e-tests/pom.xml`). Se ejecutan explícitamente: **`mvn -pl e2e-tests test -Dmaven.test.skip=false`** (no `-DskipTests=false` — `skipTests` y `maven.test.skip` son propiedades distintas; solo la segunda controla el flag declarado en `e2e-tests/pom.xml`, corregido en Task 2).
+
+## Correcciones descubiertas durante la ejecución (Tasks 1-2)
+
+La primera ejecución real end-to-end del sistema completo (nunca antes probada — Fases 1-3 solo verificaron `auth-service` con mocks/MockWebServer) reveló 3 bugs reales:
+
+1. **`e2e-tests/pom.xml` — flag de skip equivocado en la documentación operativa.** El módulo usa la propiedad `maven.test.skip` para desactivar los tests por defecto, pero el plan documentaba activarlos con `-DskipTests=false` — una propiedad distinta que no tiene efecto sobre `maven.test.skip`. Además, el plan incluía un bloque de `maven-surefire-plugin` con `<skipTests>true</skipTests>` **hardcodeado** (no parametrizado), que ni `-DskipTests=false` podía sobreescribir. Fix: se eliminó ese bloque de plugin (la propiedad `maven.test.skip` en `<properties>` es suficiente y sí es overrideable), y se documentó el flag correcto: `-Dmaven.test.skip=false`.
+
+2. **Realm de Keycloak: `VERIFY_PROFILE` bloqueaba el login de cualquier usuario recién registrado.** Keycloak (25.0) exige por defecto un perfil de usuario completo (nombre/apellido) antes de autenticar via `grant_type=password`; como `POST /auth/register` solo pide `username`/`email`/`password` (por diseño, ver `FUNCIONAL.md`), todo login fallaba con `invalid_grant: Account is not fully set up`, devuelto como `401 INVALID_CREDENTIALS` por `auth-service`. Fix: se agregó `requiredActions: [{ alias: VERIFY_PROFILE, enabled: false }]` a `docker/keycloak/loyalty-realm.json`. Este bug estaba latente desde Fase 0/3 — nunca se detectó porque ningún test anterior hacía un login real contra Keycloak (Fase 3 usaba `MockWebServer`).
+
+3. **`KeycloakTokenClient` no enviaba `client_secret` en el grant de login.** `loyalty-app` es un client confidencial (`publicClient: false`), así que el grant `password` (Resource Owner Password Credentials) también requiere autenticación del cliente, no solo del usuario — sin `client_secret`, Keycloak responde `401` indistinguible de credenciales de usuario inválidas. Fix: se agregó el parámetro `client_secret` al formulario del token request, una nueva propiedad `keycloak.login-client-secret` en `application.yml`, y el parámetro correspondiente al constructor de `KeycloakTokenClient` (Fase 3, ajustando también su test unitario). Igual que el bug anterior, estaba latente desde la Task 6 original de Fase 3 y solo se detectó al ejecutar un login real.
+
+Los 3 bugs se verificaron corregidos con el flujo real completo a través del Gateway: `POST /auth/register` → `201`, `POST /auth/login` → `200` con `accessToken`/`refreshToken` reales de Keycloak.

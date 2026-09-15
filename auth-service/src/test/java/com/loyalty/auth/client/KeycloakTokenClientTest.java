@@ -24,7 +24,7 @@ class KeycloakTokenClientTest {
         server = new MockWebServer();
         server.start();
         RestClient restClient = RestClient.builder().baseUrl(server.url("/").toString()).build();
-        client = new KeycloakTokenClient(restClient, "loyalty-realm", "loyalty-app");
+        client = new KeycloakTokenClient(restClient, "loyalty-realm", "loyalty-app", "loyalty-app-dev-secret");
     }
 
     @AfterEach

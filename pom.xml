@@ -43,5 +43,6 @@
     <module>transfer-service</module>
     <module>auth-service</module>
     <module>gateway</module>
+    <module>e2e-tests</module>
   </modules>
 </project>
