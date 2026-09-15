@@ -22,9 +22,9 @@ public class TransferSagaPublisher {
                 new DebitRequestedEvent(transactionId, sourceAccountId, amount, Instant.now().toString()));
     }
 
-    public void publishCreditRequested(String transactionId, String targetAccountId, long amount) {
+    public void publishCreditRequested(String transactionId, String sourceAccountId, String targetAccountId, long amount) {
         kafkaTemplate.send("credit-events", transactionId,
-                new CreditRequestedEvent(transactionId, targetAccountId, amount, Instant.now().toString()));
+                new CreditRequestedEvent(transactionId, sourceAccountId, targetAccountId, amount, Instant.now().toString()));
     }
 
     public void publishCompensateDebit(String transactionId, String sourceAccountId, long amount) {

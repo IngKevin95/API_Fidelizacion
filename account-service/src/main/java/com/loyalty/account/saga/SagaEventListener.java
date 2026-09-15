@@ -56,7 +56,8 @@ public class SagaEventListener {
             return;
         }
 
-        boolean credited = accountRepository.creditIfActive(event.targetAccountId(), event.amount(), event.transactionId());
+        boolean fromTreasury = "acc-treasury".equals(event.sourceAccountId());
+        boolean credited = accountRepository.creditIfActive(event.targetAccountId(), event.amount(), event.transactionId(), fromTreasury);
         if (credited) {
             publisher.publishCreditResult(CreditResultEvent.succeeded(event.transactionId()));
         } else {

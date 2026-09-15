@@ -98,10 +98,10 @@ class AccountAtomicOperationsIT {
     }
 
     @Test
-    void firstCreditIsRecordedAsSeedEventType() {
+    void creditFromTreasuryIsRecordedAsSeedEventType() {
         saveAccount("acc-4", 0L, 0L, AccountStatus.ACTIVE);
 
-        boolean result = accountRepository.creditIfActive("acc-4", 100L, "tx-5");
+        boolean result = accountRepository.creditIfActive("acc-4", 100L, "tx-5", true);
 
         assertThat(result).isTrue();
         List<BalanceLedgerEntry> entries = ledgerRepository.findByAccountIdOrderByCreatedAtAsc("acc-4");
@@ -110,11 +110,11 @@ class AccountAtomicOperationsIT {
     }
 
     @Test
-    void secondCreditIsRecordedAsCreditEventType() {
+    void creditNotFromTreasuryIsRecordedAsCreditEventType() {
         saveAccount("acc-5", 0L, 0L, AccountStatus.ACTIVE);
-        accountRepository.creditIfActive("acc-5", 100L, "tx-6");
+        accountRepository.creditIfActive("acc-5", 100L, "tx-6", true); // initial SEED
 
-        boolean result = accountRepository.creditIfActive("acc-5", 25L, "tx-7");
+        boolean result = accountRepository.creditIfActive("acc-5", 25L, "tx-7", false);
 
         assertThat(result).isTrue();
         List<BalanceLedgerEntry> entries = ledgerRepository.findByAccountIdOrderByCreatedAtAsc("acc-5");
@@ -126,7 +126,7 @@ class AccountAtomicOperationsIT {
     void creditFailsWhenAccountInactive() {
         saveAccount("acc-6", 50L, 0L, AccountStatus.INACTIVE);
 
-        boolean result = accountRepository.creditIfActive("acc-6", 25L, "tx-8");
+        boolean result = accountRepository.creditIfActive("acc-6", 25L, "tx-8", false);
 
         assertThat(result).isFalse();
     }

@@ -89,7 +89,7 @@ class SagaEventListenerIT {
         saveAccount("acc-3", 10L);
 
         kafkaTemplate.send("credit-events", "tx-3",
-                new CreditRequestedEvent("tx-3", "acc-3", 25L, Instant.now().toString()));
+                new CreditRequestedEvent("tx-3", "acc-treasury", "acc-3", 25L, Instant.now().toString()));
 
         CreditResultEvent result = resultCollector.pollCreditResult(Duration.ofSeconds(10));
 

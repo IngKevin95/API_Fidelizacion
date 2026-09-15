@@ -30,7 +30,7 @@ public class TransferSagaListener {
         }
 
         if (event.success()) {
-            publisher.publishCreditRequested(transaction.getId(), transaction.getTargetAccountId(), transaction.getAmount());
+            publisher.publishCreditRequested(transaction.getId(), transaction.getSourceAccountId(), transaction.getTargetAccountId(), transaction.getAmount());
         } else {
             transaction.setStatus(TransactionStatus.FAILED);
             transaction.setFailureReason(event.reason());
