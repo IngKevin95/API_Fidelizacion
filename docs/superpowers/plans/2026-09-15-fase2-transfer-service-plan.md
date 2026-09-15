@@ -2381,3 +2381,12 @@ git commit -m "feat: agrega endpoint interno GET /transactions por cuenta, resue
 ## Nota para Fase 3 (o ajuste a Fase 1)
 
 `account-service` necesita un ajuste posterior: su `GET /accounts/{id}/transactions` (documentado como pendiente en la spec de Fase 1) debe implementarse como una llamada `RestClient` `@LoadBalanced` desde `account-service` hacia `http://transfer-service/transactions?accountId={id}`, reenviando el JWT del request original — mismo patrón que `AccountClient` en este plan (Task 5), pero en la dirección inversa. Este ajuste no se incluye en el plan de Fase 2 porque modifica `account-service`, no `transfer-service`; se recomienda ejecutarlo como una tarea corta de "ajuste de Fase 1" antes de avanzar a Fase 3, o junto con Fase 3.
+
+## Correcciones descubiertas durante la ejecución
+
+La verificación real de Task 9 (`TransferControllerIT`) reveló 2 bugs que el self-review documental no podía anticipar:
+
+1. **JWT mockeado sin authorities.** El test `validTransferReturns202WithPendingStatus` usaba `jwt().jwt(j -> j.subject("user-1"))` sin `.authorities(...)`. `SecurityMockMvcRequestPostProcessors.jwt()` no pasa por el `JwtAuthenticationConverter` real de la app — usa su propio conversor por defecto (basado en el claim `scope`, ausente aquí), así que sin autoridades explícitas el `@PreAuthorize("hasRole('USER')")` del controller deniega con `403`. Fix: agregar `.authorities(new SimpleGrantedAuthority("ROLE_USER"))` al post-processor.
+2. **Test sin broker Kafka.** El flujo real de `POST /transfer` exitoso invoca `TransferSagaPublisher.publishDebitRequested(...)`, que necesita un broker Kafka. El test no declaraba `@EmbeddedKafka`, así que el intento de publicar fallaba con `ConfigException: No resolvable bootstrap urls given in bootstrap.servers` (el hostname `kafka` de `application.yml` no es resoluble fuera de Docker). Fix: agregar `@EmbeddedKafka(partitions = 1, topics = {"debit-events"})` a la clase de test y sobrescribir `spring.kafka.bootstrap-servers` vía `@DynamicPropertySource` apuntando al broker embebido.
+
+Ambos verificados con `mvn -pl transfer-service -am test -Dtest=TransferControllerIT` en verde tras el fix.
