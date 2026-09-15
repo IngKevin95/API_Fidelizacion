@@ -603,4 +603,113 @@ git commit -m "test: verifica enrutamiento del gateway con WireMock"
 
 ## Nota de verificación recomendada (no incluida como task formal)
 
-Análogo a Fases 0-3: se recomienda, tras completar las 4 tareas, levantar el stack completo (`docker-compose up`, agregando `gateway` al compose si aún no está — ver nota de Fase 3 sobre `auth-service` tampoco estar en el compose) y probar manualmente que una request real a `{gateway}/accounts/{id}` con un JWT de Keycloak real llega correctamente a `account-service` a través de Eureka real, no solo contra WireMock.
+Análogo a Fases 0-3: se recomienda, tras completar las 4 tareas, levantar el stack completo (`docker-compose up`, agregando `gateway` al compose si aún no está — ver nota de Fase 3 sobre `auth-service` tampoco estar en el compose) y probar manualmente que una request real a `{gateway}/accounts/{id}` con un JWT de Keycloak real llega correctamente a `account-service` a través de Eureka real.
+
+## Correcciones descubiertas durante la ejecución
+
+Al ejecutar Task 4 se descubrió que **WireMock (`wiremock-jre8`) es incompatible con un módulo puramente reactivo**: su servidor embebido usa Jetty 9 sobre `javax.servlet`, que no existe en el classpath de un proyecto WebFlux-only (sin `spring-boot-starter-web`), y agregar `javax.servlet-api` manualmente solo destapaba la siguiente clase faltante de Jetty (`org.eclipse.jetty.util.log.Log`) — un problema de incompatibilidad de stack, no de una dependencia faltante puntual.
+
+**Fix:** se reemplazó WireMock por servidores stub construidos directamente con `reactor-netty` (`reactor.netty.http.server.HttpServer`), que ya es una dependencia transitiva de `spring-cloud-starter-gateway` — cero dependencias nuevas, cero conflictos de stack servlet/reactivo. `RoutingIT` (Task 4) queda así:
+
+```java
+package com.loyalty.gateway;
+
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.web.reactive.server.WebTestClient;
+import reactor.core.publisher.Mono;
+import reactor.netty.DisposableServer;
+import reactor.netty.http.server.HttpServer;
+
+import java.util.concurrent.atomic.AtomicReference;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@TestPropertySource(properties = "eureka.client.enabled=false")
+class RoutingIT {
+
+    private static DisposableServer authServiceMock;
+    private static DisposableServer accountServiceMock;
+    private static DisposableServer transferServiceMock;
+
+    private static final AtomicReference<String> lastAccountsAuthHeader = new AtomicReference<>();
+
+    @BeforeAll
+    static void startMocks() {
+        authServiceMock = HttpServer.create()
+                .port(18191)
+                .route(routes -> routes.post("/auth/register",
+                        (req, res) -> res.status(201).send()))
+                .bindNow();
+
+        accountServiceMock = HttpServer.create()
+                .port(18192)
+                .route(routes -> routes.get("/accounts/acc-1", (req, res) -> {
+                    lastAccountsAuthHeader.set(req.requestHeaders().get("Authorization"));
+                    return res.status(200).sendString(Mono.just("{}"));
+                }))
+                .bindNow();
+
+        transferServiceMock = HttpServer.create()
+                .port(18193)
+                .route(routes -> routes.post("/api/v1/points/transfer",
+                        (req, res) -> res.status(202).send()))
+                .bindNow();
+    }
+
+    @AfterAll
+    static void stopMocks() {
+        authServiceMock.disposeNow();
+        accountServiceMock.disposeNow();
+        transferServiceMock.disposeNow();
+    }
+
+    @AfterEach
+    void resetState() {
+        lastAccountsAuthHeader.set(null);
+    }
+
+    @LocalServerPort
+    private int port;
+
+    private WebTestClient webTestClient() {
+        return WebTestClient.bindToServer().baseUrl("http://localhost:" + port).build();
+    }
+
+    @Test
+    void routesAuthRequestsToAuthService() {
+        webTestClient().post().uri("/auth/register")
+                .header("Content-Type", "application/json")
+                .bodyValue("{}")
+                .exchange()
+                .expectStatus().isCreated();
+    }
+
+    @Test
+    void routesAccountRequestsToAccountServiceAndForwardsAuthorizationHeader() {
+        webTestClient().get().uri("/accounts/acc-1")
+                .header("Authorization", "Bearer test-token")
+                .exchange()
+                .expectStatus().isOk();
+
+        assertThat(lastAccountsAuthHeader.get()).isEqualTo("Bearer test-token");
+    }
+
+    @Test
+    void routesTransferRequestsToTransferService() {
+        webTestClient().post().uri("/api/v1/points/transfer")
+                .header("Content-Type", "application/json")
+                .bodyValue("{}")
+                .exchange()
+                .expectStatus().isEqualTo(202);
+    }
+}
+```
+
+Las rutas se sobreescriben con un `gateway/src/test/resources/application.yml` que apunta directamente a los puertos fijos `18191`/`18192`/`18193` en vez de `lb://` (evitando también la incertidumbre original sobre `@DynamicPropertySource` con índices de array). `wiremock-jre8` se eliminó del `pom.xml` (nunca se agregó `javax.servlet-api`, quedó descartado). Los 3 tests pasan, confirmando que cada ruta llega al backend correcto y que el header `Authorization` se reenvía intacto.
