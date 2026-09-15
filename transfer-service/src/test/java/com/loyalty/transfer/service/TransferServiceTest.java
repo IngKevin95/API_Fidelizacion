@@ -101,6 +101,33 @@ class TransferServiceTest {
         verify(sagaPublisher).publishDebitRequested(anyString(), org.mockito.ArgumentMatchers.eq("acc-1"), anyLong());
     }
 
+    @Test
+    void allowsTransferBelowZeroWhenMinBalanceIsNegative() {
+        AccountView source = accountView("acc-treasury", "system", 0L, "ACTIVE");
+        source.setMinBalance(-1_000_000L);
+        AccountView target = accountView("acc-2", "user-2", 0L, "ACTIVE");
+        when(accountClient.fetchAccount("acc-treasury", "token")).thenReturn(source);
+        when(accountClient.fetchAccount("acc-2", "token")).thenReturn(target);
+        when(transactionRepository.save(any(Transaction.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Transaction result = transferService.initiate("acc-treasury", "acc-2", 500L, "admin-1", "token");
+
+        assertThat(result.getStatus()).isEqualTo(TransactionStatus.PENDING);
+    }
+
+    @Test
+    void rejectsWhenResultWouldGoBelowMinBalance() {
+        AccountView source = accountView("acc-1", "user-1", 10L, "ACTIVE");
+        source.setMinBalance(0L);
+        AccountView target = accountView("acc-2", "user-2", 0L, "ACTIVE");
+        when(accountClient.fetchAccount("acc-1", "token")).thenReturn(source);
+        when(accountClient.fetchAccount("acc-2", "token")).thenReturn(target);
+
+        assertThatThrownBy(() -> transferService.initiate("acc-1", "acc-2", 40L, "user-1", "token"))
+                .isInstanceOf(TransferUnprocessableException.class)
+                .hasFieldOrPropertyWithValue("code", "INSUFFICIENT_BALANCE");
+    }
+
     private AccountView accountView(String id, String ownerId, long balance, String status) {
         AccountView view = new AccountView();
         view.setId(id);
