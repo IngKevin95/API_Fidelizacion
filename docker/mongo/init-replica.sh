@@ -1,13 +1,15 @@
 #!/bin/sh
 set -e
 
+MONGO_HOST="${MONGO_HOST:-mongo}"
+
 echo "Esperando a que mongod acepte conexiones..."
-until mongosh --host localhost --eval "print('ok')" > /dev/null 2>&1; do
+until mongosh --host "$MONGO_HOST" --eval "print('ok')" > /dev/null 2>&1; do
   sleep 1
 done
 
 echo "Inicializando replica set rs0..."
-mongosh --host localhost --eval '
+mongosh --host "$MONGO_HOST" --eval '
   try {
     rs.status();
     print("Replica set ya inicializado.");
