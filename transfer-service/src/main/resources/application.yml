@@ -1,0 +1,41 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: transfer-service
+  data:
+    mongodb:
+      uri: mongodb://mongo:27017/transfer_service?replicaSet=rs0
+  kafka:
+    bootstrap-servers: kafka:9092
+    consumer:
+      group-id: transfer-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.loyalty.transfer.saga.events
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://keycloak:8080/realms/loyalty-realm
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://eureka-server:8761/eureka/
+
+transfer:
+  saga:
+    timeout-seconds: 30
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
