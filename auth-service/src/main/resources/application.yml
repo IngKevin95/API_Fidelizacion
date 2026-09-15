@@ -9,9 +9,9 @@ keycloak:
   base-url: http://keycloak:8080
   realm: loyalty-realm
   admin-client-id: loyalty-app
-  admin-client-secret: loyalty-app-dev-secret
+  admin-client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:loyalty-app-dev-secret}
   login-client-id: loyalty-app
-  login-client-secret: loyalty-app-dev-secret
+  login-client-secret: ${KEYCLOAK_LOGIN_CLIENT_SECRET:loyalty-app-dev-secret}
 
 eureka:
   client:
