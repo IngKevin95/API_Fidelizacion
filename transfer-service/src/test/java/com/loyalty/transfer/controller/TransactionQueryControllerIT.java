@@ -39,6 +39,9 @@ class TransactionQueryControllerIT {
         registry.add("spring.data.mongodb.uri", mongo::getReplicaSetUrl);
     }
 
+    @org.springframework.boot.test.mock.mockito.MockBean
+    private com.loyalty.transfer.client.AccountClient accountClient;
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -51,10 +54,24 @@ class TransactionQueryControllerIT {
     }
 
     @Test
+    void rejectsWhenRequesterIsNotOwnerNorAdmin() throws Exception {
+        saveTransaction("tx-1", "acc-1", "acc-2");
+        org.mockito.Mockito.when(accountClient.fetchAccount(org.mockito.ArgumentMatchers.eq("acc-1"), org.mockito.ArgumentMatchers.anyString()))
+                .thenThrow(new com.loyalty.transfer.exception.TransferAccessDeniedException("No autorizado para acceder a la cuenta acc-1"));
+
+        mockMvc.perform(get("/transactions")
+                        .param("accountId", "acc-1")
+                        .with(jwt().jwt(j -> j.subject("intruder")).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void listsTransactionsWhereAccountIsSourceOrTarget() throws Exception {
         saveTransaction("tx-1", "acc-1", "acc-2");
         saveTransaction("tx-2", "acc-3", "acc-1");
         saveTransaction("tx-3", "acc-4", "acc-5");
+        org.mockito.Mockito.when(accountClient.fetchAccount(org.mockito.ArgumentMatchers.eq("acc-1"), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(new com.loyalty.transfer.dto.AccountView());
 
         mockMvc.perform(get("/transactions")
                         .param("accountId", "acc-1")
