@@ -325,10 +325,16 @@ git commit -m "feat: agrega eureka-server minimo con test de healthcheck"
 
 `eureka-server/Dockerfile`:
 ```dockerfile
-FROM eclipse-temurin:21-jdk-alpine AS build
+FROM maven:3.9-eclipse-temurin-21-alpine AS build
 WORKDIR /app
-COPY . .
-RUN ./mvnw -q -pl eureka-server -am -DskipTests package || (apt-get update && apt-get install -y maven && mvn -q -pl eureka-server -am -DskipTests package)
+COPY pom.xml .
+COPY eureka-server/pom.xml eureka-server/pom.xml
+COPY account-service/pom.xml account-service/pom.xml
+COPY transfer-service/pom.xml transfer-service/pom.xml
+COPY auth-service/pom.xml auth-service/pom.xml
+COPY gateway/pom.xml gateway/pom.xml
+COPY eureka-server/src eureka-server/src
+RUN mvn -q -pl eureka-server -am -DskipTests package
 
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
@@ -336,6 +342,8 @@ COPY --from=build /app/eureka-server/target/eureka-server-*.jar app.jar
 EXPOSE 8761
 ENTRYPOINT ["java", "-jar", "app.jar"]
 ```
+
+*(Corregido durante la implementación: el repo no tiene wrapper `mvnw`, y el fallback original con `apt-get` fallaba sobre una imagen Alpine, que usa `apk`. Se usa la imagen oficial `maven:3.9-eclipse-temurin-21-alpine`, que trae Maven preinstalado, copiando solo los POMs y el código fuente necesarios para el build en capas cacheables.)*
 
 - [ ] **Step 2: Verificar que la imagen construye localmente**
 
