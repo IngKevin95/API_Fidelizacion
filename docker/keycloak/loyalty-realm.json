@@ -9,6 +9,9 @@
       { "name": "ADMIN", "description": "Administrador de la plataforma" }
     ]
   },
+  "requiredActions": [
+    { "alias": "VERIFY_PROFILE", "name": "Verify Profile", "providerId": "VERIFY_PROFILE", "enabled": false, "defaultAction": false, "priority": 90 }
+  ],
   "clients": [
     {
       "clientId": "loyalty-app",

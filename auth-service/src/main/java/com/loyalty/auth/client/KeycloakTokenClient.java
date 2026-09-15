@@ -18,21 +18,25 @@ public class KeycloakTokenClient {
     private final RestClient restClient;
     private final String realm;
     private final String clientId;
+    private final String clientSecret;
 
     @Autowired
     public KeycloakTokenClient(RestClient.Builder restClientBuilder,
                                 @Value("${keycloak.base-url}") String baseUrl,
                                 @Value("${keycloak.realm}") String realm,
-                                @Value("${keycloak.login-client-id}") String clientId) {
+                                @Value("${keycloak.login-client-id}") String clientId,
+                                @Value("${keycloak.login-client-secret}") String clientSecret) {
         this.restClient = restClientBuilder.baseUrl(baseUrl).build();
         this.realm = realm;
         this.clientId = clientId;
+        this.clientSecret = clientSecret;
     }
 
-    public KeycloakTokenClient(RestClient restClient, String realm, String clientId) {
+    public KeycloakTokenClient(RestClient restClient, String realm, String clientId, String clientSecret) {
         this.restClient = restClient;
         this.realm = realm;
         this.clientId = clientId;
+        this.clientSecret = clientSecret;
     }
 
     @SuppressWarnings("unchecked")
@@ -40,6 +44,7 @@ public class KeycloakTokenClient {
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("grant_type", "password");
         form.add("client_id", clientId);
+        form.add("client_secret", clientSecret);
         form.add("username", username);
         form.add("password", password);
 

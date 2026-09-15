@@ -15,12 +15,14 @@ public class TestResultCollector {
     private final LinkedBlockingQueue<DebitResultEvent> debitResults = new LinkedBlockingQueue<>();
     private final LinkedBlockingQueue<CreditResultEvent> creditResults = new LinkedBlockingQueue<>();
 
-    @KafkaListener(topics = "debit-results", groupId = "test-collector-debit")
+    @KafkaListener(topics = "debit-results", groupId = "test-collector-debit",
+            properties = "spring.json.value.default.type:com.loyalty.account.saga.events.DebitResultEvent")
     public void onDebitResult(DebitResultEvent event) {
         debitResults.add(event);
     }
 
-    @KafkaListener(topics = "credit-results", groupId = "test-collector-credit")
+    @KafkaListener(topics = "credit-results", groupId = "test-collector-credit",
+            properties = "spring.json.value.default.type:com.loyalty.account.saga.events.CreditResultEvent")
     public void onCreditResult(CreditResultEvent event) {
         creditResults.add(event);
     }
