@@ -5,6 +5,7 @@ public class AccountView {
     private String id;
     private String ownerId;
     private long balance;
+    private Long minBalance;
     private String status;
 
     public String getId() {
@@ -29,6 +30,14 @@ public class AccountView {
 
     public void setBalance(long balance) {
         this.balance = balance;
+    }
+
+    public Long getMinBalance() {
+        return minBalance;
+    }
+
+    public void setMinBalance(Long minBalance) {
+        this.minBalance = minBalance;
     }
 
     public String getStatus() {

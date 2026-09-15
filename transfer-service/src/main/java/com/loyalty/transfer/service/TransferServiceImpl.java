@@ -44,7 +44,8 @@ public class TransferServiceImpl implements TransferService {
         if (!"ACTIVE".equals(target.getStatus())) {
             throw new TransferUnprocessableException("TARGET_INACTIVE", "La cuenta destino no esta activa");
         }
-        if (source.getBalance() < amount) {
+        long effectiveMinBalance = source.getMinBalance() != null ? source.getMinBalance() : 0L;
+        if (source.getBalance() - amount < effectiveMinBalance) {
             throw new TransferUnprocessableException("INSUFFICIENT_BALANCE", "Saldo insuficiente en la cuenta origen");
         }
 
