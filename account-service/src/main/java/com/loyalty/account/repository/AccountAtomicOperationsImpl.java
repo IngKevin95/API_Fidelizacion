@@ -29,10 +29,13 @@ public class AccountAtomicOperationsImpl implements AccountAtomicOperations {
 
     @Override
     @Transactional("transactionManager")
-    public boolean debitIfSufficientBalance(String accountId, long amount, String transactionId) {
+    public DebitOutcome debitIfSufficientBalance(String accountId, long amount, String transactionId) {
         Account before = mongoTemplate.findById(accountId, Account.class);
-        if (before == null || before.getStatus() != AccountStatus.ACTIVE) {
-            return false;
+        if (before == null) {
+            return DebitOutcome.failure("ACCOUNT_NOT_FOUND");
+        }
+        if (before.getStatus() != AccountStatus.ACTIVE) {
+            return DebitOutcome.failure("SOURCE_INACTIVE");
         }
 
         CriteriaDefinition minBalanceExpr = new CriteriaDefinition() {
@@ -59,8 +62,9 @@ public class AccountAtomicOperationsImpl implements AccountAtomicOperations {
             long balanceAfter = before.getBalance() - amount;
             ledgerRepository.save(new BalanceLedgerEntry(accountId, BalanceLedgerEventType.DEBIT, transactionId,
                     -amount, before.getBalance(), balanceAfter));
+            return DebitOutcome.success();
         }
-        return applied;
+        return DebitOutcome.failure("INSUFFICIENT_BALANCE");
     }
 
     @Override

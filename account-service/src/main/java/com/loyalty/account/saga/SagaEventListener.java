@@ -1,6 +1,7 @@
 package com.loyalty.account.saga;
 
 import com.loyalty.account.repository.AccountRepository;
+import com.loyalty.account.repository.DebitOutcome;
 import com.loyalty.account.saga.events.CompensateDebitEvent;
 import com.loyalty.account.saga.events.CreditRequestedEvent;
 import com.loyalty.account.saga.events.CreditResultEvent;
@@ -36,11 +37,11 @@ public class SagaEventListener {
             return;
         }
 
-        boolean debited = accountRepository.debitIfSufficientBalance(event.sourceAccountId(), event.amount(), event.transactionId());
-        if (debited) {
+        DebitOutcome outcome = accountRepository.debitIfSufficientBalance(event.sourceAccountId(), event.amount(), event.transactionId());
+        if (outcome.isSuccess()) {
             publisher.publishDebitResult(DebitResultEvent.succeeded(event.transactionId()));
         } else {
-            publisher.publishDebitResult(DebitResultEvent.failed(event.transactionId(), "INSUFFICIENT_BALANCE"));
+            publisher.publishDebitResult(DebitResultEvent.failed(event.transactionId(), outcome.reason()));
         }
     }
 
