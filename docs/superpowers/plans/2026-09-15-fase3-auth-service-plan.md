@@ -871,9 +871,6 @@ public class KeycloakAdminClient {
                     })
                     .toBodilessEntity();
         } catch (RestClientException ex) {
-            if (ex instanceof UserAlreadyExistsException) {
-                throw ex;
-            }
             throw new KeycloakUnavailableException("No se pudo crear el usuario en Keycloak: " + ex.getMessage());
         }
 
@@ -1410,3 +1407,5 @@ Antes de cerrar este plan se verificó Task 1 (el mapeo de roles del service acc
 2. **`GET /admin/realms/{realm}/roles/USER` devuelve un objeto único, no una lista.** El borrador inicial de `KeycloakAdminClient.assignUserRole` (Task 5) esperaba una `List`; Keycloak real devuelve un `Map` (un solo rol, no una colección) para ese endpoint específico por nombre. Fix: el código y el mock del test en Task 5 ya usan `Map.class` para esa llamada y envuelven el resultado en `List.of(userRole)` al hacer el POST de asignación (Keycloak sí espera una lista para `role-mappings/realm`).
 
 Ambos verificados end-to-end contra Keycloak real: creación de usuario (`201`) + asignación de rol (`204`) exitosas. Nota operativa para quien ejecute los comandos `docker run` de este plan en Git Bash sobre Windows: usar `MSYS_NO_PATHCONV=1` antes del comando — sin esto, Git Bash reescribe la ruta del volumen (`/opt/keycloak/...`) a una ruta de Windows y el import falla silenciosamente (0 realms importados, sin error visible en los logs de Keycloak).
+
+Un tercer bug se descubrió al ejecutar Task 5 (no detectable en el self-review de este plan, solo al compilar): el `catch (RestClientException ex) { if (ex instanceof UserAlreadyExistsException) ... }` en `createUser` no compila, porque `UserAlreadyExistsException` extiende `RuntimeException` (Task 4), no `RestClientException` — son tipos de excepción no relacionados, y Java rechaza un `instanceof` entre clases concretas sin relación de herencia. Fix: eliminar el chequeo — como `UserAlreadyExistsException` no es un `RestClientException`, nunca sería capturada por ese `catch` de todas formas, así que se propaga sola sin necesidad de relanzarla explícitamente.
