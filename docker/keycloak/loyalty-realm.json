@@ -1,0 +1,47 @@
+{
+  "realm": "loyalty-realm",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "roles": {
+    "realm": [
+      { "name": "USER", "description": "Usuario estandar de la plataforma" },
+      { "name": "ADMIN", "description": "Administrador de la plataforma" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "loyalty-app",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "loyalty-app-dev-secret",
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "serviceAccountsEnabled": true,
+      "redirectUris": ["*"],
+      "protocol": "openid-connect"
+    }
+  ],
+  "users": [
+    {
+      "username": "test-user",
+      "enabled": true,
+      "email": "test-user@loyalty.local",
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "TestUser123!", "temporary": false }
+      ],
+      "realmRoles": ["USER"]
+    },
+    {
+      "username": "test-admin",
+      "enabled": true,
+      "email": "test-admin@loyalty.local",
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "TestAdmin123!", "temporary": false }
+      ],
+      "realmRoles": ["ADMIN"]
+    }
+  ]
+}
