@@ -1,0 +1,4 @@
+.history/
+target/
+*.log
+.env
