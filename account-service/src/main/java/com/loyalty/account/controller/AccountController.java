@@ -1,0 +1,69 @@
+package com.loyalty.account.controller;
+
+import com.loyalty.account.domain.Account;
+import com.loyalty.account.dto.AccountResponse;
+import com.loyalty.account.dto.CreateAccountRequest;
+import com.loyalty.account.dto.UpdateStatusRequest;
+import com.loyalty.account.service.AccountService;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/accounts")
+public class AccountController {
+
+    private final AccountService accountService;
+
+    public AccountController(AccountService accountService) {
+        this.accountService = accountService;
+    }
+
+    @PostMapping
+    @PreAuthorize("hasRole('USER')")
+    public ResponseEntity<AccountResponse> create(@Valid @RequestBody CreateAccountRequest request,
+                                                   Authentication authentication) {
+        String ownerId = subjectOf(authentication);
+        Account created = accountService.create(ownerId, request.getBalance());
+        return ResponseEntity.status(HttpStatus.CREATED).body(AccountResponse.from(created));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<AccountResponse> getById(@PathVariable("id") String id, Authentication authentication) {
+        String requesterId = subjectOf(authentication);
+        boolean isAdmin = hasRole(authentication, "ROLE_ADMIN");
+        Account account = accountService.getByIdForRequester(id, requesterId, isAdmin);
+        return ResponseEntity.ok(AccountResponse.from(account));
+    }
+
+    @PatchMapping("/{id}/status")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<AccountResponse> updateStatus(@PathVariable("id") String id,
+                                                         @Valid @RequestBody UpdateStatusRequest request) {
+        Account updated = accountService.updateStatus(id, request.getStatus());
+        return ResponseEntity.ok(AccountResponse.from(updated));
+    }
+
+    private String subjectOf(Authentication authentication) {
+        if (authentication instanceof JwtAuthenticationToken jwtAuth) {
+            Jwt jwt = jwtAuth.getToken();
+            return jwt.getSubject();
+        }
+        throw new IllegalStateException("Autenticacion no es JWT");
+    }
+
+    private boolean hasRole(Authentication authentication, String role) {
+        for (GrantedAuthority authority : authentication.getAuthorities()) {
+            if (authority.getAuthority().equals(role)) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
