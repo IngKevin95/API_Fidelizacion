@@ -76,4 +76,13 @@ class AccountLimitsControllerIT {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.minBalance").value(-500));
     }
+
+    @Test
+    void rejectsRequestWithoutMinBalance() throws Exception {
+        mockMvc.perform(patch("/accounts/acc-limits-test/limits")
+                        .with(jwt().jwt(j -> j.subject("admin-1")).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType("application/json")
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
 }

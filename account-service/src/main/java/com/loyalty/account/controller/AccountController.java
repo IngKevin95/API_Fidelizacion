@@ -91,7 +91,7 @@ public class AccountController {
     @PatchMapping("/{id}/limits")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<AccountResponse> updateLimits(@PathVariable("id") String id,
-                                                         @RequestBody UpdateLimitsRequest request) {
+                                                         @Valid @RequestBody UpdateLimitsRequest request) {
         Account updated = accountService.updateMinBalance(id, request.getMinBalance());
         return ResponseEntity.ok(AccountResponse.from(updated));
     }
