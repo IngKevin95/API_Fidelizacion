@@ -3,6 +3,7 @@ package com.loyalty.transfer.client;
 import com.loyalty.transfer.dto.AccountView;
 import com.loyalty.transfer.exception.AccountNotFoundException;
 import com.loyalty.transfer.exception.TransferAccessDeniedException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -12,6 +13,7 @@ public class AccountClient {
 
     private final RestClient restClient;
 
+    @Autowired
     public AccountClient(RestClient.Builder restClientBuilder) {
         this.restClient = restClientBuilder.baseUrl("http://account-service").build();
     }
