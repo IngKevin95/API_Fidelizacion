@@ -16,7 +16,7 @@
 - `spring-boot-maven-plugin` debe fijar `<version>${spring-boot.version}</version>` y `<executions><goal>repackage</goal></executions>` explícitamente (lección de Fase 0).
 - Formato estándar de error en todo el sistema: `{ "code", "message", "timestamp" }`.
 - `auth-service` **no** valida JWT de clientes (no es Resource Server) — sus 2 endpoints son públicos por diseño.
-- El realm `loyalty-realm` ya existe (Fase 0, `docker/keycloak/loyalty-realm.json`), con roles `USER`/`ADMIN`, client `loyalty-app` (`serviceAccountsEnabled: true`), y usuarios de prueba `test-user`/`test-admin`. Este plan modifica ese archivo para otorgar al service account de `loyalty-app` el rol de cliente `manage-users` del client `realm-management` (rol necesario para crear usuarios vía Admin API).
+- El realm `loyalty-realm` ya existe (Fase 0, `docker/keycloak/loyalty-realm.json`), con roles `USER`/`ADMIN`, client `loyalty-app` (`serviceAccountsEnabled: true`), y usuarios de prueba `test-user`/`test-admin`. Este plan modifica ese archivo para otorgar al service account de `loyalty-app` los roles de cliente `manage-users` (crear/gestionar usuarios) y `view-realm` (leer definiciones de roles, necesario para asignar el rol `USER` al usuario recién creado) del client `realm-management` — ambos verificados contra un Keycloak real, ver Task 1.
 - Registro en Eureka: `eureka-server:8761` (Fase 0).
 
 ---
@@ -82,7 +82,7 @@ En `docker/keycloak/loyalty-realm.json`, dentro del array `clients`, en el objet
       "enabled": true,
       "serviceAccountClientId": "loyalty-app",
       "clientRoles": {
-        "realm-management": ["manage-users"]
+        "realm-management": ["manage-users", "view-realm"]
       }
     }
 ```
@@ -139,35 +139,40 @@ El archivo completo de `docker/keycloak/loyalty-realm.json` queda:
       "enabled": true,
       "serviceAccountClientId": "loyalty-app",
       "clientRoles": {
-        "realm-management": ["manage-users"]
+        "realm-management": ["manage-users", "view-realm"]
       }
     }
   ]
 }
 ```
 
-- [ ] **Step 2: Verificar el realm importándolo en un Keycloak real (Testcontainers, verificación manual)**
+- [ ] **Step 2: Verificar el realm importándolo en un Keycloak real**
 
-Run (requiere Docker):
+Ya verificado durante la escritura de este plan (ver "Correcciones descubiertas" al final). Si se quiere reverificar (requiere Docker; en Git Bash sobre Windows usar `MSYS_NO_PATHCONV=1` para que la ruta del volumen no se reescriba):
 ```bash
-docker run --rm -d --name kc-realm-check -p 18080:8080 \
+MSYS_NO_PATHCONV=1 docker run --rm -d --name kc-realm-check -p 18080:8080 \
   -e KEYCLOAK_ADMIN=admin -e KEYCLOAK_ADMIN_PASSWORD=admin \
   -v "$(pwd)/docker/keycloak/loyalty-realm.json:/opt/keycloak/data/import/loyalty-realm.json:ro" \
   quay.io/keycloak/keycloak:25.0 start-dev --import-realm
 ```
-Esperar ~15s, luego obtener un token de servicio y confirmar que trae el rol:
+Esperar a que el log muestre `Import finished successfully`, luego:
 ```bash
 curl -s -X POST http://localhost:18080/realms/loyalty-realm/protocol/openid-connect/token \
   -d "grant_type=client_credentials&client_id=loyalty-app&client_secret=loyalty-app-dev-secret" \
-  | grep -o '"access_token":"[^"]*"'
+  -o /tmp/kc_token.json
+TOKEN=$(grep -o '"access_token":"[^"]*"' /tmp/kc_token.json | cut -d'"' -f4)
+curl -s -X POST "http://localhost:18080/admin/realms/loyalty-realm/users" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"username":"verify-test","enabled":true,"credentials":[{"type":"password","value":"Test1234!","temporary":false}]}' \
+  -w "\nHTTP_STATUS=%{http_code}\n"
 ```
-Expected: respuesta con `access_token` presente (200 OK). Luego detener: `docker stop kc-realm-check`.
+Expected: `HTTP_STATUS=201`. Luego: `docker rm -f kc-realm-check`.
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add docker/keycloak/loyalty-realm.json
-git commit -m "fix: otorga rol manage-users al service account de loyalty-app en el realm de keycloak"
+git commit -m "fix: otorga roles manage-users y view-realm al service account de loyalty-app en el realm de keycloak"
 ```
 
 ---
@@ -772,7 +777,7 @@ class KeycloakAdminClientTest {
                 .setBody("[{\"id\":\"user-uuid-1\",\"username\":\"newuser\"}]"));
         server.enqueue(new MockResponse().setResponseCode(200)
                 .setHeader("Content-Type", "application/json")
-                .setBody("[{\"id\":\"role-uuid\",\"name\":\"USER\"}]"));
+                .setBody("{\"id\":\"role-uuid\",\"name\":\"USER\"}"));
         server.enqueue(new MockResponse().setResponseCode(204));
 
         assertThatCode(() -> client.createUser("newuser", "newuser@loyalty.local", "Password123!"))
@@ -866,9 +871,6 @@ public class KeycloakAdminClient {
                     })
                     .toBodilessEntity();
         } catch (RestClientException ex) {
-            if (ex instanceof UserAlreadyExistsException) {
-                throw ex;
-            }
             throw new KeycloakUnavailableException("No se pudo crear el usuario en Keycloak: " + ex.getMessage());
         }
 
@@ -904,24 +906,24 @@ public class KeycloakAdminClient {
 
         String userId = (String) users.get(0).get("id");
 
-        List<Map<String, Object>> realmRoles = restClient.get()
+        Map<String, Object> userRole = restClient.get()
                 .uri("/admin/realms/{realm}/roles/USER", realm)
                 .header("Authorization", "Bearer " + serviceToken)
                 .retrieve()
-                .body(List.class);
+                .body(Map.class);
 
         restClient.post()
                 .uri("/admin/realms/{realm}/users/{userId}/role-mappings/realm", realm, userId)
                 .header("Authorization", "Bearer " + serviceToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(realmRoles)
+                .body(List.of(userRole))
                 .retrieve()
                 .toBodilessEntity();
     }
 }
 ```
 
-*(Nota: el test mockea `GET /admin/realms/{realm}/roles/USER` devolviendo una lista (Keycloak real devuelve un objeto único para ese endpoint, no una lista — el test usa una lista de un elemento por simplicidad de mock; si la implementación real contra Keycloak requiere ajustar el tipo de respuesta a `Map` en vez de `List`, corregir en Task 8 durante la verificación de integración real con Testcontainers, documentándolo como corrección descubierta.)*
+*(Nota ya corregida antes de implementar: `GET /admin/realms/{realm}/roles/USER` devuelve un objeto único `Map`, no una lista — verificado contra un Keycloak real en Docker durante la escritura de este plan. El código de `assignUserRole` y el mock del test ya reflejan esto. También se verificó que el rol `manage-users` por sí solo no basta: el service account necesita además `view-realm` para poder leer la definición del rol antes de asignarlo — ver Task 1, que ya otorga ambos.)*
 
 - [ ] **Step 4: Ejecutar el test y confirmar que pasa**
 
@@ -1393,10 +1395,17 @@ git commit -m "feat: agrega AuthController con endpoints POST /auth/register y /
 - Otorgar `manage-users` al service account → Task 1.
 - Testing: unit test de registro exitoso y username duplicado (Task 5, vía `KeycloakAdminClientTest` — cubre a nivel de cliente; Task 7 cubre a nivel de service con mocks), integration test de validación de formato (Task 8).
 
-**2. Placeholder scan:** sin TBD/TODO. La única nota abierta (Task 5, formato de respuesta `GET /roles/USER`) tiene una salida concreta: ajustar el tipo de deserialización si la verificación real con Keycloak (recomendada como parte de la ejecución, análogo a las correcciones de Fases 0-2) lo requiere.
+**2. Placeholder scan:** sin TBD/TODO. El punto que en un primer borrador quedaba abierto (Task 5, formato de respuesta `GET /roles/USER`) ya se verificó y corrigió contra un Keycloak real antes de cerrar este plan — ver "Correcciones descubiertas durante la escritura del plan" al final.
 
 **3. Type consistency:** `TokenResponse` (Task 3) usado idéntico en Tasks 6, 7, 8. `AuthService.register(String, String, String)`/`login(String, String)` firma igual en Task 7 (implementación) y Task 8 (controller). `KeycloakAdminClient`/`KeycloakTokenClient` (Tasks 5, 6) inyectados en `AuthServiceImpl` (Task 7) con los mismos tipos.
 
-## Nota de verificación recomendada (no incluida como task formal)
+## Correcciones descubiertas durante la escritura del plan
 
-Dado que Fases 0-2 encontraron bugs reales solo detectables al ejecutar contra infraestructura real (Docker/Keycloak/Kafka), se recomienda, tras completar las 8 tareas, levantar el stack completo (`docker-compose up`, incluyendo Fase 0 + este servicio) y ejecutar manualmente el flujo real: `POST /auth/register` → `POST /auth/login` → usar el JWT resultante contra `account-service` (`POST /accounts`). Esto validará el formato real de las respuestas de la Admin API de Keycloak (Task 5) que un mock no puede garantizar al 100%.
+Antes de cerrar este plan se verificó Task 1 (el mapeo de roles del service account) contra un Keycloak 25.0 real en Docker, siguiendo la misma disciplina de Fases 0-2 de no confiar en configuración sin ejecutar. Se encontraron y corrigieron 2 problemas:
+
+1. **Faltaba el rol `view-realm`.** Con solo `manage-users`, `GET /admin/realms/{realm}/roles/USER` devolvía `403 Forbidden` — `manage-users` permite gestionar usuarios pero no leer la definición de roles del realm, necesaria antes de poder asignar el rol `USER` a un usuario nuevo. Fix: se agregó `view-realm` a `clientRoles.realm-management` en Task 1 (y ya se refleja en el archivo del plan).
+2. **`GET /admin/realms/{realm}/roles/USER` devuelve un objeto único, no una lista.** El borrador inicial de `KeycloakAdminClient.assignUserRole` (Task 5) esperaba una `List`; Keycloak real devuelve un `Map` (un solo rol, no una colección) para ese endpoint específico por nombre. Fix: el código y el mock del test en Task 5 ya usan `Map.class` para esa llamada y envuelven el resultado en `List.of(userRole)` al hacer el POST de asignación (Keycloak sí espera una lista para `role-mappings/realm`).
+
+Ambos verificados end-to-end contra Keycloak real: creación de usuario (`201`) + asignación de rol (`204`) exitosas. Nota operativa para quien ejecute los comandos `docker run` de este plan en Git Bash sobre Windows: usar `MSYS_NO_PATHCONV=1` antes del comando — sin esto, Git Bash reescribe la ruta del volumen (`/opt/keycloak/...`) a una ruta de Windows y el import falla silenciosamente (0 realms importados, sin error visible en los logs de Keycloak).
+
+Un tercer bug se descubrió al ejecutar Task 5 (no detectable en el self-review de este plan, solo al compilar): el `catch (RestClientException ex) { if (ex instanceof UserAlreadyExistsException) ... }` en `createUser` no compila, porque `UserAlreadyExistsException` extiende `RuntimeException` (Task 4), no `RestClientException` — son tipos de excepción no relacionados, y Java rechaza un `instanceof` entre clases concretas sin relación de herencia. Fix: eliminar el chequeo — como `UserAlreadyExistsException` no es un `RestClientException`, nunca sería capturada por ese `catch` de todas formas, así que se propaga sola sin necesidad de relanzarla explícitamente.

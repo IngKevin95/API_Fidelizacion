@@ -1,0 +1,24 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: auth-service
+
+keycloak:
+  base-url: http://keycloak:8080
+  realm: loyalty-realm
+  admin-client-id: loyalty-app
+  admin-client-secret: loyalty-app-dev-secret
+  login-client-id: loyalty-app
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://eureka-server:8761/eureka/
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
