@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class TransferClientTest {
 
@@ -22,7 +23,13 @@ class TransferClientTest {
     void setUp() throws IOException {
         server = new MockWebServer();
         server.start();
-        RestClient restClient = RestClient.builder().baseUrl(server.url("/").toString()).build();
+        org.springframework.boot.web.client.ClientHttpRequestFactorySettings settings = org.springframework.boot.web.client.ClientHttpRequestFactorySettings.DEFAULTS
+                .withConnectTimeout(java.time.Duration.ofSeconds(3))
+                .withReadTimeout(java.time.Duration.ofSeconds(5));
+        RestClient restClient = RestClient.builder()
+                .baseUrl(server.url("/").toString())
+                .requestFactory(org.springframework.boot.web.client.ClientHttpRequestFactories.get(settings))
+                .build();
         transferClient = new TransferClient(restClient);
     }
 
@@ -43,5 +50,17 @@ class TransferClientTest {
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getId()).isEqualTo("tx-1");
         assertThat(result.get(0).getAmount()).isEqualTo(40L);
+    }
+
+    @Test
+    void listTransactionsThrowsExceptionOnTimeout() {
+        server.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody("[]")
+                .setBodyDelay(6, java.util.concurrent.TimeUnit.SECONDS));
+
+        assertThatThrownBy(() -> transferClient.listTransactions("acc-1", "token-123"))
+                .isInstanceOf(Exception.class);
     }
 }

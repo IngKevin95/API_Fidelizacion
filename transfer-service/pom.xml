@@ -85,6 +85,10 @@
       <version>4.2.2</version>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.springframework.cloud</groupId>
+      <artifactId>spring-cloud-starter-circuitbreaker-resilience4j</artifactId>
+    </dependency>
   </dependencies>
 
   <build>
