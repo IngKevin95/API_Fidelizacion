@@ -12,6 +12,7 @@ public class Account {
     private String id;
     private String ownerId;
     private long balance;
+    private Long minBalance;
     private AccountStatus status;
     private Instant createdAt;
     private Instant updatedAt;
@@ -38,6 +39,14 @@ public class Account {
 
     public void setBalance(long balance) {
         this.balance = balance;
+    }
+
+    public Long getMinBalance() {
+        return minBalance;
+    }
+
+    public void setMinBalance(Long minBalance) {
+        this.minBalance = minBalance;
     }
 
     public AccountStatus getStatus() {

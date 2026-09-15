@@ -5,9 +5,11 @@ import com.loyalty.account.domain.AccountStatus;
 
 public interface AccountService {
 
-    Account create(String ownerId, Long initialBalance);
+    Account create(String ownerId);
 
     Account getByIdForRequester(String accountId, String requesterId, boolean isAdmin);
 
     Account updateStatus(String accountId, AccountStatus newStatus);
+
+    Account updateMinBalance(String accountId, Long minBalance);
 }

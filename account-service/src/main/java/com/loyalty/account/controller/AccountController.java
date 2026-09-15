@@ -3,9 +3,12 @@ package com.loyalty.account.controller;
 import com.loyalty.account.client.TransferClient;
 import com.loyalty.account.domain.Account;
 import com.loyalty.account.dto.AccountResponse;
+import com.loyalty.account.dto.BalanceLedgerEntryResponse;
 import com.loyalty.account.dto.CreateAccountRequest;
 import com.loyalty.account.dto.TransactionView;
+import com.loyalty.account.dto.UpdateLimitsRequest;
 import com.loyalty.account.dto.UpdateStatusRequest;
+import com.loyalty.account.repository.BalanceLedgerRepository;
 import com.loyalty.account.service.AccountService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -25,10 +28,13 @@ public class AccountController {
 
     private final AccountService accountService;
     private final TransferClient transferClient;
+    private final BalanceLedgerRepository ledgerRepository;
 
-    public AccountController(AccountService accountService, TransferClient transferClient) {
+    public AccountController(AccountService accountService, TransferClient transferClient,
+                              BalanceLedgerRepository ledgerRepository) {
         this.accountService = accountService;
         this.transferClient = transferClient;
+        this.ledgerRepository = ledgerRepository;
     }
 
     @PostMapping
@@ -36,7 +42,7 @@ public class AccountController {
     public ResponseEntity<AccountResponse> create(@Valid @RequestBody CreateAccountRequest request,
                                                    Authentication authentication) {
         String ownerId = subjectOf(authentication);
-        Account created = accountService.create(ownerId, request.getBalance());
+        Account created = accountService.create(ownerId);
         return ResponseEntity.status(HttpStatus.CREATED).body(AccountResponse.from(created));
     }
 
@@ -61,11 +67,32 @@ public class AccountController {
         return ResponseEntity.ok(transactions);
     }
 
+    @GetMapping("/{id}/ledger")
+    public ResponseEntity<List<BalanceLedgerEntryResponse>> getLedger(@PathVariable("id") String id,
+                                                                       Authentication authentication) {
+        String requesterId = subjectOf(authentication);
+        boolean isAdmin = hasRole(authentication, "ROLE_ADMIN");
+        accountService.getByIdForRequester(id, requesterId, isAdmin);
+
+        List<BalanceLedgerEntryResponse> entries = ledgerRepository.findByAccountIdOrderByCreatedAtAsc(id).stream()
+                .map(BalanceLedgerEntryResponse::from)
+                .toList();
+        return ResponseEntity.ok(entries);
+    }
+
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<AccountResponse> updateStatus(@PathVariable("id") String id,
                                                          @Valid @RequestBody UpdateStatusRequest request) {
         Account updated = accountService.updateStatus(id, request.getStatus());
+        return ResponseEntity.ok(AccountResponse.from(updated));
+    }
+
+    @PatchMapping("/{id}/limits")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<AccountResponse> updateLimits(@PathVariable("id") String id,
+                                                         @RequestBody UpdateLimitsRequest request) {
+        Account updated = accountService.updateMinBalance(id, request.getMinBalance());
         return ResponseEntity.ok(AccountResponse.from(updated));
     }
 

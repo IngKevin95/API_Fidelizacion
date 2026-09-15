@@ -11,6 +11,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -28,6 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Testcontainers
 @SpringBootTest
 @AutoConfigureMockMvc
+@TestPropertySource(properties = {"eureka.client.enabled=false", "spring.kafka.listener.auto-startup=false"})
 class AccountControllerIT {
 
     @Container
@@ -54,14 +56,14 @@ class AccountControllerIT {
     }
 
     @Test
-    void createAccountReturns201WithOwnerFromJwt() throws Exception {
+    void createAccountReturns201WithOwnerFromJwtAndZeroBalance() throws Exception {
         mockMvc.perform(post("/accounts")
                         .with(jwt().jwt(j -> j.subject("user-1")).authorities(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_USER")))
                         .contentType("application/json")
-                        .content("{\"balance\": 100}"))
+                        .content("{}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.ownerId").value("user-1"))
-                .andExpect(jsonPath("$.balance").value(100));
+                .andExpect(jsonPath("$.balance").value(0));
     }
 
     @Test
@@ -103,5 +105,26 @@ class AccountControllerIT {
                         .content("{\"status\": \"INACTIVE\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("INACTIVE"));
+    }
+
+    @Test
+    void getLedgerReturnsEntriesForOwner() throws Exception {
+        Account account = new Account();
+        account.setId("acc-ledger-test");
+        account.setOwnerId("user-1");
+        account.setBalance(100L);
+        account.setMinBalance(0L);
+        account.setStatus(AccountStatus.ACTIVE);
+        account.setCreatedAt(Instant.now());
+        account.setUpdatedAt(Instant.now());
+        accountRepository.save(account);
+
+        accountRepository.creditIfActive("acc-ledger-test", 100L, "tx-seed-test");
+
+        mockMvc.perform(get("/accounts/acc-ledger-test/ledger")
+                        .with(jwt().jwt(j -> j.subject("user-1"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].eventType").value("SEED"))
+                .andExpect(jsonPath("$[0].balanceAfter").value(200));
     }
 }

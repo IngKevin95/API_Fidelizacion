@@ -20,11 +20,12 @@ public class AccountServiceImpl implements AccountService {
     }
 
     @Override
-    public Account create(String ownerId, Long initialBalance) {
+    public Account create(String ownerId) {
         Account account = new Account();
         account.setId("acc-" + UUID.randomUUID());
         account.setOwnerId(ownerId);
-        account.setBalance(initialBalance == null ? 0L : initialBalance);
+        account.setBalance(0L);
+        account.setMinBalance(0L);
         account.setStatus(AccountStatus.ACTIVE);
         Instant now = Instant.now();
         account.setCreatedAt(now);
@@ -50,6 +51,16 @@ public class AccountServiceImpl implements AccountService {
                 .orElseThrow(() -> new AccountNotFoundException("Cuenta no encontrada: " + accountId));
 
         account.setStatus(newStatus);
+        account.setUpdatedAt(Instant.now());
+        return accountRepository.save(account);
+    }
+
+    @Override
+    public Account updateMinBalance(String accountId, Long minBalance) {
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new AccountNotFoundException("Cuenta no encontrada: " + accountId));
+
+        account.setMinBalance(minBalance);
         account.setUpdatedAt(Instant.now());
         return accountRepository.save(account);
     }

@@ -34,27 +34,19 @@ class AccountServiceTest {
     }
 
     @Test
-    void createPersistsAccountWithOwnerAndActiveStatus() {
+    void createPersistsAccountWithOwnerActiveStatusAndZeroBalance() {
         when(accountRepository.save(any(Account.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Account created = accountService.create("user-1", 50L);
+        Account created = accountService.create("user-1");
 
         assertThat(created.getOwnerId()).isEqualTo("user-1");
-        assertThat(created.getBalance()).isEqualTo(50L);
+        assertThat(created.getBalance()).isZero();
+        assertThat(created.getMinBalance()).isZero();
         assertThat(created.getStatus()).isEqualTo(AccountStatus.ACTIVE);
 
         ArgumentCaptor<Account> captor = ArgumentCaptor.forClass(Account.class);
         verify(accountRepository).save(captor.capture());
         assertThat(captor.getValue().getId()).startsWith("acc-");
-    }
-
-    @Test
-    void createDefaultsBalanceToZeroWhenNull() {
-        when(accountRepository.save(any(Account.class))).thenAnswer(inv -> inv.getArgument(0));
-
-        Account created = accountService.create("user-1", null);
-
-        assertThat(created.getBalance()).isZero();
     }
 
     @Test
@@ -92,6 +84,17 @@ class AccountServiceTest {
 
         assertThatThrownBy(() -> accountService.getByIdForRequester("acc-missing", "user-1", false))
                 .isInstanceOf(AccountNotFoundException.class);
+    }
+
+    @Test
+    void updateMinBalancePersistsNewLimit() {
+        Account account = accountWith("acc-1", "user-1");
+        when(accountRepository.findById("acc-1")).thenReturn(Optional.of(account));
+        when(accountRepository.save(any(Account.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Account updated = accountService.updateMinBalance("acc-1", -1000L);
+
+        assertThat(updated.getMinBalance()).isEqualTo(-1000L);
     }
 
     @Test

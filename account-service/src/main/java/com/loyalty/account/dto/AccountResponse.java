@@ -10,6 +10,7 @@ public class AccountResponse {
     private String id;
     private String ownerId;
     private long balance;
+    private Long minBalance;
     private AccountStatus status;
     private Instant createdAt;
     private Instant updatedAt;
@@ -19,6 +20,7 @@ public class AccountResponse {
         response.id = account.getId();
         response.ownerId = account.getOwnerId();
         response.balance = account.getBalance();
+        response.minBalance = account.getMinBalance();
         response.status = account.getStatus();
         response.createdAt = account.getCreatedAt();
         response.updatedAt = account.getUpdatedAt();
@@ -35,6 +37,10 @@ public class AccountResponse {
 
     public long getBalance() {
         return balance;
+    }
+
+    public Long getMinBalance() {
+        return minBalance;
     }
 
     public AccountStatus getStatus() {

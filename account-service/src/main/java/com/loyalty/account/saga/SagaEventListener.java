@@ -36,7 +36,7 @@ public class SagaEventListener {
             return;
         }
 
-        boolean debited = accountRepository.debitIfSufficientBalance(event.sourceAccountId(), event.amount());
+        boolean debited = accountRepository.debitIfSufficientBalance(event.sourceAccountId(), event.amount(), event.transactionId());
         if (debited) {
             publisher.publishDebitResult(DebitResultEvent.succeeded(event.transactionId()));
         } else {
@@ -55,7 +55,7 @@ public class SagaEventListener {
             return;
         }
 
-        boolean credited = accountRepository.creditIfActive(event.targetAccountId(), event.amount());
+        boolean credited = accountRepository.creditIfActive(event.targetAccountId(), event.amount(), event.transactionId());
         if (credited) {
             publisher.publishCreditResult(CreditResultEvent.succeeded(event.transactionId()));
         } else {
@@ -70,7 +70,7 @@ public class SagaEventListener {
         if (!tryMarkProcessed(idempotencyKey)) {
             return;
         }
-        accountRepository.creditUnconditionally(event.sourceAccountId(), event.amount());
+        accountRepository.creditUnconditionally(event.sourceAccountId(), event.amount(), event.transactionId());
     }
 
     private boolean tryMarkProcessed(String idempotencyKey) {
