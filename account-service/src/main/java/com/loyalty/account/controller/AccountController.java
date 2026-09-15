@@ -36,7 +36,7 @@ public class AccountController {
     public ResponseEntity<AccountResponse> create(@Valid @RequestBody CreateAccountRequest request,
                                                    Authentication authentication) {
         String ownerId = subjectOf(authentication);
-        Account created = accountService.create(ownerId, request.getBalance());
+        Account created = accountService.create(ownerId);
         return ResponseEntity.status(HttpStatus.CREATED).body(AccountResponse.from(created));
     }
 

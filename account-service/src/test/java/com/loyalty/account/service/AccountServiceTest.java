@@ -34,27 +34,19 @@ class AccountServiceTest {
     }
 
     @Test
-    void createPersistsAccountWithOwnerAndActiveStatus() {
+    void createPersistsAccountWithOwnerActiveStatusAndZeroBalance() {
         when(accountRepository.save(any(Account.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Account created = accountService.create("user-1", 50L);
+        Account created = accountService.create("user-1");
 
         assertThat(created.getOwnerId()).isEqualTo("user-1");
-        assertThat(created.getBalance()).isEqualTo(50L);
+        assertThat(created.getBalance()).isZero();
+        assertThat(created.getMinBalance()).isZero();
         assertThat(created.getStatus()).isEqualTo(AccountStatus.ACTIVE);
 
         ArgumentCaptor<Account> captor = ArgumentCaptor.forClass(Account.class);
         verify(accountRepository).save(captor.capture());
         assertThat(captor.getValue().getId()).startsWith("acc-");
-    }
-
-    @Test
-    void createDefaultsBalanceToZeroWhenNull() {
-        when(accountRepository.save(any(Account.class))).thenAnswer(inv -> inv.getArgument(0));
-
-        Account created = accountService.create("user-1", null);
-
-        assertThat(created.getBalance()).isZero();
     }
 
     @Test

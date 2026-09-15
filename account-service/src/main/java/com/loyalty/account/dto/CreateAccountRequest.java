@@ -1,17 +1,5 @@
 package com.loyalty.account.dto;
 
-import jakarta.validation.constraints.PositiveOrZero;
-
 public class CreateAccountRequest {
-
-    @PositiveOrZero
-    private Long balance;
-
-    public Long getBalance() {
-        return balance;
-    }
-
-    public void setBalance(Long balance) {
-        this.balance = balance;
-    }
+    // Intencionalmente vacio: toda cuenta nueva nace en balance 0 (ver spec D3).
 }
