@@ -13,10 +13,21 @@ Esta spec agrega un **kardex de auditoría real**: cada movimiento de saldo, sin
 **Alternativa descartada:** creación manual vía `POST /accounts` por un `ADMIN` la primera vez — se descarta porque depende de un paso manual que, si se olvida, rompe todo el flujo de fondeo de cuentas nuevas en cualquier entorno (desarrollo, CI, producción).
 **Solo un `ADMIN` puede transferir desde `acc-treasury`** — la transferencia normal ya valida ownership (`jwt.sub == account.ownerId`); como `acc-treasury` no tiene un dueño humano, la única forma de operar sobre ella es con rol `ADMIN` (que ya salta esa validación en el resto de endpoints, ver `FUNCIONAL.md`).
 
-### D2 — Saldo de la tesorería sin límite inferior
-**Decisión:** `acc-treasury` puede quedar en negativo — representa que el sistema emite puntos según necesidad de negocio, no un pool físico finito.
-**Alternativa descartada:** saldo inicial finito que se agota como cualquier cuenta — más estricto contablemente, pero agrega un paso operativo de reabastecimiento manual que nadie pidió resolver todavía.
-**Implicación técnica:** la operación atómica de débito (`debitIfSufficientBalance`) no puede aplicarse tal cual a `acc-treasury` — necesita una variante que no valide `balance >= amount` para esta cuenta específica (ver Task de implementación).
+### D2 — Saldo de la tesorería sin reabastecimiento, con piso configurable (`minBalance`)
+**Decisión:** `acc-treasury` **nunca se reabastece** — su saldo va quedando en negativo a medida que emite puntos, precisamente para poder leer ahí "cuánto ha emitido el sistema en total" (el negativo acumulado *es* el gasto total). Para no dejarla sin ningún control, se agrega un campo `minBalance` (piso configurable) a **todas** las cuentas, no solo a la tesorería:
+
+| Campo | Tipo | Default | Significado |
+|---|---|---|---|
+| `minBalance` | `Long`, nullable | `0` | El valor más bajo al que puede llegar `balance`. Un débito que dejaría `balance < minBalance` se rechaza (`INSUFFICIENT_BALANCE`), sin importar si el resultado sería positivo o negativo — es un piso, no una validación de "saldo suficiente" en el sentido tradicional. |
+
+Ejemplos de uso del mismo mecanismo:
+- Cuenta normal sin reserva (comportamiento actual, sin cambios): `minBalance = 0` — no puede quedar en negativo.
+- Cuenta normal con una reserva protegida ("bolsillo" intocable): `minBalance = 100000` — puede gastar libremente hasta llegar justo a ese piso, nunca por debajo, aunque el saldo actual sea mayor.
+- `acc-treasury`: `minBalance = null` (sin piso — puede endeudarse indefinidamente) o un número muy negativo si en el futuro se quiere acotar cuánto puede emitir antes de bloquearse (parametrizable, editable por `ADMIN`, sin necesidad de redeploy).
+
+**Alternativa descartada (piso como constante de configuración en `application.yml`):** más simple de implementar, pero fija el límite a nivel de despliegue — cambiarlo requeriría reiniciar el servicio. Se descarta porque el piso es un parámetro de negocio que debe poder ajustarse en caliente, y porque distintas cuentas podrían necesitar distintos pisos (no tiene sentido como una única constante global).
+**Alternativa descartada (tesorería con saldo inicial finito que se agota):** más estricto contablemente, pero agrega un paso operativo de reabastecimiento manual que rompe el propósito mismo de que el negativo acumulado sirva como métrica de gasto total.
+**Implicación técnica:** la operación atómica de débito (`debitIfSufficientBalance` en `AccountAtomicOperationsImpl`) cambia su condición de `balance >= amount` a `balance - amount >= minBalance` (equivalente cuando `minBalance = 0`, el caso por defecto). Ya no hace falta una variante separada solo para tesorería — es la misma lógica para todas las cuentas, parametrizada por su propio `minBalance`.
 
 ### D3 — `POST /accounts` ya no acepta saldo inicial
 **Decisión:** toda cuenta nueva se crea con `balance = 0`. Cualquier fondeo inicial es una transferencia real y explícita desde `acc-treasury` (`POST /transfer`, requiere `ADMIN`), quedando registrada igual que cualquier otra transferencia (en `transactions` de `transfer-service` y en el `balance_ledger` de ambas cuentas).
@@ -78,13 +89,16 @@ Ningún campo se repite con el mismo propósito en dos colecciones: `balance_led
 
 ## Cambios de contrato
 
-- `CreateAccountRequest` (`account-service`): se elimina el campo `balance` (D3). `POST /accounts` siempre crea con `balance: 0`.
-- `AccountAtomicOperations` (`account-service`): se agregan `debitFromTreasury(long amount)` (sin validar suficiencia de saldo, D2) y se modifican `debitIfSufficientBalance`/`creditIfActive`/`creditUnconditionally` para, dentro de la misma transacción Mongo, insertar la línea correspondiente en `balance_ledger`.
+- `Account` (`account-service`): se agrega el campo `minBalance: Long` (nullable, default `0`) — el piso configurable de D2.
+- `CreateAccountRequest` (`account-service`): se elimina el campo `balance` (D3). `POST /accounts` siempre crea con `balance: 0` y `minBalance: 0` (una cuenta normal no tiene piso especial al crearse; ajustarlo es una operación posterior de `ADMIN`).
+- Nuevo endpoint: `PATCH /accounts/{id}/limits` — permite a un `ADMIN` actualizar `minBalance` de cualquier cuenta (incluida `acc-treasury`). Body: `{ "minBalance": -1000000 }` o `{ "minBalance": null }` para quitar el piso.
+- `AccountAtomicOperations` (`account-service`): `debitIfSufficientBalance` cambia su condición de `balance >= amount` a `balance - amount >= minBalance` (lee el `minBalance` propio de la cuenta en la misma operación atómica); ya no hace falta un método separado para tesorería (D2). `creditIfActive`/`creditUnconditionally` se modifican para, dentro de la misma transacción Mongo, insertar la línea correspondiente en `balance_ledger`.
 - Nuevo endpoint de solo lectura: `GET /accounts/{id}/ledger` — lista el kardex de una cuenta (mismo control de autorización que `GET /accounts/{id}` — dueño o `ADMIN`).
-- El seed de `acc-treasury` se agrega al arranque de `account-service` (similar a como Fase 0 sembró los usuarios de prueba de Keycloak, pero aquí es código de aplicación — un `CommandLineRunner` o `ApplicationRunner` que crea la cuenta si no existe, no un archivo de config externo).
+- El seed de `acc-treasury` se agrega al arranque de `account-service` (similar a como Fase 0 sembró los usuarios de prueba de Keycloak, pero aquí es código de aplicación — un `CommandLineRunner` o `ApplicationRunner` que crea la cuenta si no existe, con `minBalance: null`, no un archivo de config externo).
 
 ## Fuera de alcance de esta spec
 
-- Reabastecer o poner límite a `acc-treasury` (D2, decisión explícita de no hacerlo ahora).
+- Reabastecer `acc-treasury` (D2, decisión explícita de no hacerlo — su negativo acumulado es intencional, sirve como métrica de gasto total).
+- Un tope superior (`maxBalance`) — `minBalance` es solo un piso; un techo de cuánto puede crecer un saldo es un concepto distinto, no pedido en esta spec.
 - Ajustes administrativos de saldo fuera del flujo de transferencias (ej. "corrección manual" de un `ADMIN` sin pasar por `POST /transfer`) — si se necesita en el futuro, el modelo de `BalanceLedgerEntry` ya lo soporta (`transactionId: null`), pero no se implementa un endpoint para eso ahora.
 - Migración de cuentas ya existentes en un entorno con datos previos (esta spec asume que se implementa antes de tener cuentas reales en producción, o que un entorno con datos previos acepta que su ledger histórico empieza vacío desde el momento del despliegue).
