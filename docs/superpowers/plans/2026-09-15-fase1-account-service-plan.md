@@ -2081,3 +2081,11 @@ git commit -m "feat: agrega listener y publisher de eventos de la saga con idemp
 ## Gap explícito para la siguiente fase
 
 `GET /accounts/{id}/transactions` no se implementa en este plan — depende de `transfer-service` (Fase 2). Debe agregarse como tarea explícita en el plan de Fase 2, o como un ajuste a Fase 1 después de que `transfer-service` exista.
+
+## Correcciones descubiertas durante la ejecución
+
+El plan pasó el self-review documental y las 9 tareas pasaron individualmente, pero `mvn clean install` sobre el módulo completo reveló un bug de interacción entre tareas que ninguna tarea aislada podía detectar:
+
+- **`AccountServiceApplicationTests` (Task 1) rompía al agregar los `@KafkaListener` de Task 9.** El test básico de contexto (`@SpringBootTest` sin Testcontainers) intentaba arrancar los listeners Kafka reales al levantar el `ApplicationContext`, y estos fallaban con `ConfigException: No resolvable bootstrap urls given in bootstrap.servers` porque el hostname `kafka` (definido en `application.yml` para el entorno Docker) no es resoluble en la máquina del desarrollador fuera de la red de Compose. Fix: `@TestPropertySource(properties = "spring.kafka.listener.auto-startup=false")` en `AccountServiceApplicationTests`, para que ese test de contexto no arranque consumidores reales — su propósito es solo verificar que el `ApplicationContext` carga, no probar Kafka (eso ya lo cubre `SagaEventListenerIT` con Kafka embebido).
+
+Verificado con `mvn clean install` completo del monorepo (los 3 módulos con código: `eureka-server`, `account-service`, más los 4 placeholders) — `BUILD SUCCESS`, exit code 0.
