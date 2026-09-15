@@ -3,9 +3,11 @@ package com.loyalty.account.controller;
 import com.loyalty.account.client.TransferClient;
 import com.loyalty.account.domain.Account;
 import com.loyalty.account.dto.AccountResponse;
+import com.loyalty.account.dto.BalanceLedgerEntryResponse;
 import com.loyalty.account.dto.CreateAccountRequest;
 import com.loyalty.account.dto.TransactionView;
 import com.loyalty.account.dto.UpdateStatusRequest;
+import com.loyalty.account.repository.BalanceLedgerRepository;
 import com.loyalty.account.service.AccountService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -25,10 +27,13 @@ public class AccountController {
 
     private final AccountService accountService;
     private final TransferClient transferClient;
+    private final BalanceLedgerRepository ledgerRepository;
 
-    public AccountController(AccountService accountService, TransferClient transferClient) {
+    public AccountController(AccountService accountService, TransferClient transferClient,
+                              BalanceLedgerRepository ledgerRepository) {
         this.accountService = accountService;
         this.transferClient = transferClient;
+        this.ledgerRepository = ledgerRepository;
     }
 
     @PostMapping
@@ -59,6 +64,19 @@ public class AccountController {
         String bearerToken = jwtAuth.getToken().getTokenValue();
         List<TransactionView> transactions = transferClient.listTransactions(id, bearerToken);
         return ResponseEntity.ok(transactions);
+    }
+
+    @GetMapping("/{id}/ledger")
+    public ResponseEntity<List<BalanceLedgerEntryResponse>> getLedger(@PathVariable("id") String id,
+                                                                       Authentication authentication) {
+        String requesterId = subjectOf(authentication);
+        boolean isAdmin = hasRole(authentication, "ROLE_ADMIN");
+        accountService.getByIdForRequester(id, requesterId, isAdmin);
+
+        List<BalanceLedgerEntryResponse> entries = ledgerRepository.findByAccountIdOrderByCreatedAtAsc(id).stream()
+                .map(BalanceLedgerEntryResponse::from)
+                .toList();
+        return ResponseEntity.ok(entries);
     }
 
     @PatchMapping("/{id}/status")
