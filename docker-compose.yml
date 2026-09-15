@@ -78,3 +78,79 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  account-service:
+    build:
+      context: .
+      dockerfile: account-service/Dockerfile
+    ports:
+      - "8081:8081"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  transfer-service:
+    build:
+      context: .
+      dockerfile: transfer-service/Dockerfile
+    ports:
+      - "8082:8082"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+    ports:
+      - "8083:8083"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8083/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      account-service:
+        condition: service_healthy
+      transfer-service:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
