@@ -6,6 +6,7 @@ import com.loyalty.account.dto.AccountResponse;
 import com.loyalty.account.dto.BalanceLedgerEntryResponse;
 import com.loyalty.account.dto.CreateAccountRequest;
 import com.loyalty.account.dto.TransactionView;
+import com.loyalty.account.dto.UpdateLimitsRequest;
 import com.loyalty.account.dto.UpdateStatusRequest;
 import com.loyalty.account.repository.BalanceLedgerRepository;
 import com.loyalty.account.service.AccountService;
@@ -84,6 +85,14 @@ public class AccountController {
     public ResponseEntity<AccountResponse> updateStatus(@PathVariable("id") String id,
                                                          @Valid @RequestBody UpdateStatusRequest request) {
         Account updated = accountService.updateStatus(id, request.getStatus());
+        return ResponseEntity.ok(AccountResponse.from(updated));
+    }
+
+    @PatchMapping("/{id}/limits")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<AccountResponse> updateLimits(@PathVariable("id") String id,
+                                                         @RequestBody UpdateLimitsRequest request) {
+        Account updated = accountService.updateMinBalance(id, request.getMinBalance());
         return ResponseEntity.ok(AccountResponse.from(updated));
     }
 

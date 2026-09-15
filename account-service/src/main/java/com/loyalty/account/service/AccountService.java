@@ -10,4 +10,6 @@ public interface AccountService {
     Account getByIdForRequester(String accountId, String requesterId, boolean isAdmin);
 
     Account updateStatus(String accountId, AccountStatus newStatus);
+
+    Account updateMinBalance(String accountId, Long minBalance);
 }

@@ -87,6 +87,17 @@ class AccountServiceTest {
     }
 
     @Test
+    void updateMinBalancePersistsNewLimit() {
+        Account account = accountWith("acc-1", "user-1");
+        when(accountRepository.findById("acc-1")).thenReturn(Optional.of(account));
+        when(accountRepository.save(any(Account.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Account updated = accountService.updateMinBalance("acc-1", -1000L);
+
+        assertThat(updated.getMinBalance()).isEqualTo(-1000L);
+    }
+
+    @Test
     void updateStatusPersistsNewStatus() {
         Account account = accountWith("acc-1", "user-1");
         when(accountRepository.findById("acc-1")).thenReturn(Optional.of(account));

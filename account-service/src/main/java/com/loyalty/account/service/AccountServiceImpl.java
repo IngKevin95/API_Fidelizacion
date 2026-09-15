@@ -54,4 +54,14 @@ public class AccountServiceImpl implements AccountService {
         account.setUpdatedAt(Instant.now());
         return accountRepository.save(account);
     }
+
+    @Override
+    public Account updateMinBalance(String accountId, Long minBalance) {
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new AccountNotFoundException("Cuenta no encontrada: " + accountId));
+
+        account.setMinBalance(minBalance);
+        account.setUpdatedAt(Instant.now());
+        return accountRepository.save(account);
+    }
 }
