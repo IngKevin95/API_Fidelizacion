@@ -31,4 +31,16 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(response.getBody()).containsEntry("code", "ACCESS_DENIED");
     }
+
+    @Test
+    void handlesUnexpectedExceptionWithGenericFormat() {
+        RuntimeException ex = new RuntimeException("detalle interno sensible");
+
+        ResponseEntity<Map<String, Object>> response = handler.handleUnexpected(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getBody()).containsEntry("code", "INTERNAL_ERROR");
+        assertThat(response.getBody()).containsEntry("message", "Ocurrio un error inesperado");
+        assertThat(response.getBody()).containsKey("timestamp");
+    }
 }
