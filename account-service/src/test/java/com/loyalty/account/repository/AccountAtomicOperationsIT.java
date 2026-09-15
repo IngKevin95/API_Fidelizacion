@@ -53,9 +53,9 @@ class AccountAtomicOperationsIT {
     void debitSucceedsWhenBalanceStaysAtOrAboveMinBalance() {
         saveAccount("acc-1", 100L, 0L, AccountStatus.ACTIVE);
 
-        boolean result = accountRepository.debitIfSufficientBalance("acc-1", 40L, "tx-1");
+        DebitOutcome outcome = accountRepository.debitIfSufficientBalance("acc-1", 40L, "tx-1");
 
-        assertThat(result).isTrue();
+        assertThat(outcome.isSuccess()).isTrue();
         assertThat(accountRepository.findById("acc-1").orElseThrow().getBalance()).isEqualTo(60L);
 
         List<BalanceLedgerEntry> entries = ledgerRepository.findByAccountIdOrderByCreatedAtAsc("acc-1");
@@ -71,9 +71,9 @@ class AccountAtomicOperationsIT {
     void debitFailsWhenResultWouldGoBelowMinBalance() {
         saveAccount("acc-2", 10L, 0L, AccountStatus.ACTIVE);
 
-        boolean result = accountRepository.debitIfSufficientBalance("acc-2", 40L, "tx-2");
+        DebitOutcome outcome = accountRepository.debitIfSufficientBalance("acc-2", 40L, "tx-2");
 
-        assertThat(result).isFalse();
+        assertThat(outcome.isSuccess()).isFalse();
         assertThat(accountRepository.findById("acc-2").orElseThrow().getBalance()).isEqualTo(10L);
         assertThat(ledgerRepository.findByAccountIdOrderByCreatedAtAsc("acc-2")).isEmpty();
     }
@@ -82,9 +82,9 @@ class AccountAtomicOperationsIT {
     void debitSucceedsBelowZeroWhenMinBalanceIsNegative() {
         saveAccount("acc-treasury-test", 0L, -1000L, AccountStatus.ACTIVE);
 
-        boolean result = accountRepository.debitIfSufficientBalance("acc-treasury-test", 500L, "tx-3");
+        DebitOutcome outcome = accountRepository.debitIfSufficientBalance("acc-treasury-test", 500L, "tx-3");
 
-        assertThat(result).isTrue();
+        assertThat(outcome.isSuccess()).isTrue();
         assertThat(accountRepository.findById("acc-treasury-test").orElseThrow().getBalance()).isEqualTo(-500L);
     }
 
@@ -92,9 +92,9 @@ class AccountAtomicOperationsIT {
     void debitFailsWhenAccountInactive() {
         saveAccount("acc-3", 100L, 0L, AccountStatus.INACTIVE);
 
-        boolean result = accountRepository.debitIfSufficientBalance("acc-3", 10L, "tx-4");
+        DebitOutcome outcome = accountRepository.debitIfSufficientBalance("acc-3", 10L, "tx-4");
 
-        assertThat(result).isFalse();
+        assertThat(outcome.isSuccess()).isFalse();
     }
 
     @Test
@@ -156,7 +156,7 @@ class AccountAtomicOperationsIT {
             int index = i;
             executor.submit(() -> {
                 try {
-                    if (accountRepository.debitIfSufficientBalance("acc-concurrent", 30L, "tx-concurrent-" + index)) {
+                    if (accountRepository.debitIfSufficientBalance("acc-concurrent", 30L, "tx-concurrent-" + index).isSuccess()) {
                         successes.incrementAndGet();
                     }
                 } finally {
@@ -171,6 +171,32 @@ class AccountAtomicOperationsIT {
         assertThat(successes.get()).isEqualTo(3);
         assertThat(accountRepository.findById("acc-concurrent").orElseThrow().getBalance()).isEqualTo(10L);
         assertThat(ledgerRepository.findByAccountIdOrderByCreatedAtAsc("acc-concurrent")).hasSize(3);
+    }
+
+    @Test
+    void debitReturnsAccountNotFoundReasonWhenAccountDoesNotExist() {
+        DebitOutcome outcome = accountRepository.debitIfSufficientBalance("acc-nope", 10L, "tx-11");
+
+        assertThat(outcome.isSuccess()).isFalse();
+        assertThat(outcome.reason()).isEqualTo("ACCOUNT_NOT_FOUND");
+    }
+
+    @Test
+    void debitReturnsSourceInactiveReasonWhenAccountInactive() {
+        saveAccount("acc-9", 100L, 0L, AccountStatus.INACTIVE);
+
+        DebitOutcome outcome = accountRepository.debitIfSufficientBalance("acc-9", 10L, "tx-12");
+
+        assertThat(outcome.reason()).isEqualTo("SOURCE_INACTIVE");
+    }
+
+    @Test
+    void debitReturnsInsufficientBalanceReasonWhenMinBalanceViolated() {
+        saveAccount("acc-10", 10L, 0L, AccountStatus.ACTIVE);
+
+        DebitOutcome outcome = accountRepository.debitIfSufficientBalance("acc-10", 40L, "tx-13");
+
+        assertThat(outcome.reason()).isEqualTo("INSUFFICIENT_BALANCE");
     }
 
     private void saveAccount(String id, long balance, long minBalance, AccountStatus status) {
