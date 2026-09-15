@@ -1,6 +1,9 @@
 server:
   port: 8080
 
+cors:
+  allowed-origins: "*"
+
 spring:
   application:
     name: gateway
