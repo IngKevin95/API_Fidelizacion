@@ -42,6 +42,14 @@
         { "type": "password", "value": "TestAdmin123!", "temporary": false }
       ],
       "realmRoles": ["ADMIN"]
+    },
+    {
+      "username": "service-account-loyalty-app",
+      "enabled": true,
+      "serviceAccountClientId": "loyalty-app",
+      "clientRoles": {
+        "realm-management": ["manage-users", "view-realm"]
+      }
     }
   ]
 }
