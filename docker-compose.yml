@@ -27,7 +27,7 @@ services:
     command: ["start-dev", "--import-realm"]
     environment:
       KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
     ports:
       - "8180:8080"
     volumes:
@@ -125,6 +125,9 @@ services:
     build:
       context: .
       dockerfile: auth-service/Dockerfile
+    environment:
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:-loyalty-app-dev-secret}
+      KEYCLOAK_LOGIN_CLIENT_SECRET: ${KEYCLOAK_LOGIN_CLIENT_SECRET:-loyalty-app-dev-secret}
     ports:
       - "8083:8083"
     depends_on:
