@@ -9,8 +9,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CorsConfigTest {
 
     @Test
-    void createsCorsWebFilterAllowingAnyOriginAndCommonMethods() {
-        CorsConfig config = new CorsConfig();
+    void createsCorsWebFilterAllowingConfiguredOriginsAndCommonMethods() {
+        CorsConfig config = new CorsConfig("http://localhost:3000,https://app.example.com");
 
         CorsWebFilter filter = config.corsWebFilter();
 
@@ -18,12 +18,14 @@ class CorsConfigTest {
     }
 
     @Test
-    void configurationAllowsExpectedMethods() {
-        CorsConfig config = new CorsConfig();
+    void configurationAllowsExpectedMethodsAndConfiguredOriginsWithoutCredentials() {
+        CorsConfig config = new CorsConfig("http://localhost:3000,https://app.example.com");
         CorsConfiguration corsConfiguration = config.buildCorsConfiguration();
 
         assertThat(corsConfiguration.getAllowedMethods())
                 .containsExactlyInAnyOrder("GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS");
-        assertThat(corsConfiguration.getAllowedOriginPatterns()).contains("*");
+        assertThat(corsConfiguration.getAllowedOriginPatterns())
+                .containsExactlyInAnyOrder("http://localhost:3000", "https://app.example.com");
+        assertThat(corsConfiguration.getAllowCredentials()).isFalse();
     }
 }
