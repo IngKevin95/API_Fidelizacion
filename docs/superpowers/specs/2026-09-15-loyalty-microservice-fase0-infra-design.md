@@ -2,7 +2,7 @@
 
 ## Contexto
 
-El reto técnico original ("Servicio de Transferencia de Puntos") se expandió, por decisión del usuario, de un único endpoint monolítico a una plataforma de microservicios con fines de práctica personal (MongoDB, Keycloak, Kafka, Eureka, Spring Cloud Gateway). Dado el tamaño resultante, el proyecto se descompuso en fases independientes, cada una con su propio ciclo spec → plan → implementación:
+Loyalty Microservice Platform es un sistema de fidelización de puntos, diseñado para producción, sobre una arquitectura de microservicios (MongoDB, Keycloak, Kafka, Eureka, Spring Cloud Gateway). Dado el tamaño del sistema, el proyecto se descompuso en fases independientes, cada una con su propio ciclo spec → plan → implementación:
 
 1. **Fase 0 — Infraestructura base** (esta spec)
 2. Fase 1 — account-service
@@ -21,14 +21,14 @@ Esta spec cubre **solo la Fase 0**: levantar la infraestructura compartida sin c
 
 | Decisión | Elección | Razón |
 |---|---|---|
-| Persistencia | MongoDB (no Postgres/JPA pese a que el enunciado original lo sugiere) | Objetivo explícito de práctica personal con Mongo |
-| Modo Mongo | Replica set de 1 nodo (`rs0`) | Transacciones ACID multi-documento en Mongo requieren replica set; con 1 nodo basta para desarrollo/práctica |
+| Persistencia | MongoDB | Modelo de datos simple (dos entidades, sin relaciones complejas); ver D1 en ARQUITECTURA.md |
+| Modo Mongo | Replica set de 1 nodo (`rs0`) | Transacciones ACID multi-documento en Mongo requieren replica set; con 1 nodo basta para entorno de desarrollo local (producción usaría 3+ nodos para tolerancia a fallos) |
 | Concurrencia en transferencias | Update atómico condicional (`findOneAndUpdate` con filtro `balance >= amount`), no locking pesimista relacional | Equivalente Mongo-idiomático a `SELECT FOR UPDATE`; se implementará en Fase 1/2, no aquí |
 | Identity Provider | Keycloak (Resource Server pattern) | Decisión del usuario sobre OAuth2 real en vez de JWT casero |
 | Broker de eventos | Kafka en modo KRaft (sin Zookeeper) | Estándar actual, evita complejidad extra de Zookeeper |
 | Service discovery | Eureka Server (módulo propio, sin imagen oficial reusable) | Elegido explícitamente por el usuario junto con Spring Cloud Gateway |
 | Estructura de repo | Monorepo Maven multi-módulo | Un solo repo para todo el sistema, más simple de versionar y entregar |
-| IDs de negocio | Strings tipo `acc-xxxx` como `_id` de Mongo (no ObjectId nativo) | Compatibilidad con el formato de ejemplo del enunciado original y para no exponer ObjectId en la API |
+| IDs de negocio | Strings tipo `acc-xxxx` como `_id` de Mongo (no ObjectId nativo) | Evita acoplar el contrato público de la API al motor de persistencia interno |
 
 ## Estructura del repositorio
 
@@ -65,7 +65,7 @@ Los módulos `account-service`, `transfer-service`, `auth-service`, `gateway` se
 
 ### 2. Keycloak
 - Imagen oficial `quay.io/keycloak/keycloak`.
-- Modo `start-dev` (suficiente para entorno de práctica; no producción).
+- Modo `start-dev` (suficiente para entorno de desarrollo local; producción requiere modo `start` con TLS y base de datos persistente).
 - Import automático de `loyalty-realm.json` al arranque (`--import-realm`), que define:
   - Realm `loyalty-realm`.
   - Roles: `USER`, `ADMIN`.
@@ -119,6 +119,6 @@ Todos los servicios declaran `healthcheck` y `depends_on: condition: service_hea
 
 ## Riesgos / notas
 
-- Keycloak en modo `start-dev` no es apto para producción; para este ejercicio de práctica es aceptable y se documenta como tal.
-- El client secret de Keycloak queda hardcodeado en el realm JSON para desarrollo; en una fase posterior de hardening se movería a secretos gestionados (fuera de alcance del ejercicio).
-- Eureka Server sin autenticación propia (dashboard abierto); aceptable en entorno local/práctica.
+- Keycloak en modo `start-dev` no es apto para producción; aceptable solo para esta fase de desarrollo local, debe reemplazarse antes de desplegar (ver ARQUITECTURA.md §Escalabilidad y despliegue).
+- El client secret de Keycloak queda hardcodeado en el realm JSON para desarrollo; antes de un despliegue productivo debe moverse a un gestor de secretos (ver ARQUITECTURA.md §Escalabilidad y despliegue).
+- Eureka Server sin autenticación propia (dashboard abierto); aceptable en entorno local, debe protegerse antes de producción.

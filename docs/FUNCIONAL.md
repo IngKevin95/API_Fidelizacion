@@ -2,7 +2,7 @@
 
 ## Contexto de negocio
 
-Plataforma de fidelización que permite a un usuario transferir puntos de su saldo a otra cuenta. Nace de un reto técnico de un solo endpoint (`POST /api/v1/points/transfer`) y se amplió, por decisión explícita del usuario, a un sistema completo con gestión de cuentas y usuarios, con fines de práctica personal (no es un requisito de una evaluación externa — ver decisión D1).
+Plataforma de fidelización que permite a un usuario transferir puntos de su saldo a otra cuenta. Es un sistema pensado para producción: gestiona identidad de usuarios, cuentas de puntos, y transferencias entre ellas con garantías de atomicidad y trazabilidad, sobre una arquitectura de microservicios.
 
 ## Entidades de negocio
 
@@ -48,7 +48,7 @@ Atributos gestionados por Keycloak: `username`/`email`, `password` (hasheada por
 }
 ```
 
-**Response exitosa — `202 Accepted`** (no `200`/`201`, ver decisión D9 en Arquitectura: la operación es asíncrona por la saga):
+**Response exitosa — `202 Accepted`** (la operación es asíncrona: dispara una saga entre servicios, ver Arquitectura §Saga):
 ```json
 {
   "transactionId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -103,11 +103,22 @@ El cliente consulta el estado final vía `GET /accounts/{id}/transactions` o (si
 
 Un usuario puede tener ambos roles asignados (ej. un admin que también opera sus propias cuentas).
 
-## Fuera de alcance (decisión explícita)
+## Requerimientos no funcionales
 
-- Recuperación de contraseña, MFA, flujos avanzados de Keycloak (se usa configuración estándar de Keycloak `start-dev`).
+Al tratarse de un sistema pensado para producción (no un prototipo desechable), estos requerimientos guían decisiones de diseño en todas las fases:
+
+- **Consistencia de datos**: el saldo de una cuenta nunca debe quedar negativo ni duplicarse un crédito/débito, incluso bajo transferencias concurrentes sobre la misma cuenta o ante fallos parciales de un servicio.
+- **Trazabilidad**: toda transferencia debe quedar registrada con su resultado final (`COMPLETED`/`FAILED`) y motivo de fallo si aplica — auditable en cualquier momento posterior.
+- **Disponibilidad**: la caída de `transfer-service` o `account-service` no debe dejar transacciones en un estado indefinido; deben poder resolverse (completarse o compensarse) al restablecerse el servicio, gracias a la persistencia de eventos en Kafka.
+- **Idempotencia**: reintentos de red o reentregas de eventos (Kafka garantiza *at-least-once*) no deben producir dobles débitos/créditos.
+- **Seguridad**: ninguna operación sobre una cuenta ajena debe ser posible sin rol `ADMIN`; las credenciales de usuario nunca son gestionadas por los servicios de negocio, solo por Keycloak.
+- **Observabilidad** (alcance futuro, ver Arquitectura §Riesgos): en esta primera versión no se incluye distributed tracing; se documenta como deuda técnica a resolver antes de un despliegue productivo real.
+
+## Fuera de alcance (versión actual)
+
+- Recuperación de contraseña, MFA, flujos avanzados de Keycloak (se usa configuración estándar de Keycloak `start-dev`; para producción real se recomienda modo `start` con TLS y almacenamiento persistente).
 - Múltiples monedas / tipos de puntos (solo un tipo de saldo numérico entero).
-- Límites de transferencia (por monto/frecuencia) — no mencionados en el enunciado original ni pedidos por el usuario.
+- Límites de transferencia (por monto/frecuencia).
 - Borrado de cuentas o usuarios.
 - Notificaciones (email/push) al completar una transferencia.
 - Endpoint de consulta de transacción individual por ID (`GET /transactions/{id}`) — se puede agregar en una fase futura si se necesita polling directo en vez de vía historial de cuenta.
@@ -123,9 +134,8 @@ Un usuario puede tener ambos roles asignados (ej. un admin que también opera su
 
 ## Historial de decisiones funcionales
 
-Ver `docs/ARQUITECTURA.md §Decisiones y alternativas descartadas` para el detalle completo de cada decisión (D1–D12) con su justificación y alternativas evaluadas. Resumen de las que impactan directamente el comportamiento funcional visible:
+Ver `docs/ARQUITECTURA.md §Decisiones y alternativas descartadas` para el detalle completo de cada decisión (D1–D15) con su justificación y alternativas evaluadas. Resumen de las que impactan directamente el comportamiento funcional visible:
 
-- **D1 — Alcance real del ejercicio**: es práctica personal, no evaluación EPAM/NEORIS real. Esto justifica que el sistema final se aleje del enunciado original (que pedía JPA + un solo endpoint) para maximizar aprendizaje sobre Mongo/Keycloak/Kafka/microservicios.
-- **D4 — Estado de cuenta origen**: se decidió validar que **ambas** cuentas (origen y destino) estén `ACTIVE`, ampliando el enunciado original que solo mencionaba la cuenta destino.
-- **D6 — Alcance de endpoints de cuenta**: se agregaron los 4 endpoints de `/accounts` (crear, consultar, cambiar estado, historial) que no estaban en el enunciado original, para que el sistema sea operable de punta a punta.
-- **D9 — Respuesta asíncrona de `/transfer`**: al introducirse la saga coreografiada, la respuesta ya no puede devolver balances actualizados de forma síncrona (`200`/`201` como pedía el enunciado original) — se documenta como `202 Accepted` con `status: PENDING`, y el resultado final se consulta vía historial.
+- **D3 — Estado de cuenta origen**: se decidió validar que **ambas** cuentas (origen y destino) estén `ACTIVE` antes de una transferencia, no solo la destino — más consistente como regla de negocio real.
+- **D4 — Alcance de endpoints de cuenta**: se incluyeron los 4 endpoints de `/accounts` (crear, consultar, cambiar estado, historial) para que el sistema sea operable de punta a punta sin pasos manuales.
+- **D8/D9 — Respuesta asíncrona de `/transfer`**: al adoptar la saga coreografiada entre servicios, la respuesta no puede devolver balances actualizados de forma síncrona — se responde `202 Accepted` con `status: PENDING`, y el resultado final se consulta vía historial.
