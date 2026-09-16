@@ -14,6 +14,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 
 @Repository
@@ -41,9 +42,15 @@ public class AccountAtomicOperationsImpl implements AccountAtomicOperations {
         CriteriaDefinition minBalanceExpr = new CriteriaDefinition() {
             @Override
             public Document getCriteriaObject() {
-                return new Document("$expr", new Document("$gte", List.of(
-                        new Document("$subtract", List.of("$balance", amount)),
-                        new Document("$ifNull", List.of("$minBalance", 0L))
+                // minBalance == null significa "sin piso" (ej. acc-treasury): la cuenta
+                // puede ir arbitrariamente negativa. No confundir con minBalance == 0
+                // (piso normal de una cuenta comun, que si bloquea el debito).
+                return new Document("$expr", new Document("$or", List.of(
+                        new Document("$eq", Arrays.asList("$minBalance", null)),
+                        new Document("$gte", List.of(
+                                new Document("$subtract", List.of("$balance", amount)),
+                                "$minBalance"
+                        ))
                 )));
             }
 

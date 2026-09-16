@@ -116,6 +116,20 @@ class TransferServiceTest {
     }
 
     @Test
+    void allowsTransferArbitrarilyBelowZeroWhenMinBalanceIsNull() {
+        AccountView source = accountView("acc-treasury", "system", 0L, "ACTIVE");
+        source.setMinBalance(null);
+        AccountView target = accountView("acc-2", "user-2", 0L, "ACTIVE");
+        when(accountClient.fetchAccount("acc-treasury", "token")).thenReturn(source);
+        when(accountClient.fetchAccount("acc-2", "token")).thenReturn(target);
+        when(transactionRepository.save(any(Transaction.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Transaction result = transferService.initiate("acc-treasury", "acc-2", 500L, "admin-1", "token");
+
+        assertThat(result.getStatus()).isEqualTo(TransactionStatus.PENDING);
+    }
+
+    @Test
     void rejectsWhenResultWouldGoBelowMinBalance() {
         AccountView source = accountView("acc-1", "user-1", 10L, "ACTIVE");
         source.setMinBalance(0L);
@@ -133,6 +147,7 @@ class TransferServiceTest {
         view.setId(id);
         view.setOwnerId(ownerId);
         view.setBalance(balance);
+        view.setMinBalance(0L);
         view.setStatus(status);
         return view;
     }
