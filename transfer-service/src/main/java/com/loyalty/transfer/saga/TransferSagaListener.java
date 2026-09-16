@@ -21,8 +21,7 @@ public class TransferSagaListener {
         this.publisher = publisher;
     }
 
-    @KafkaListener(topics = "debit-results", groupId = "transfer-service-debit-results",
-            properties = "spring.json.value.default.type:com.loyalty.transfer.saga.events.DebitResultEvent")
+    @KafkaListener(topics = "debit-results", groupId = "transfer-service-debit-results")
     public void onDebitResult(DebitResultEvent event) {
         Transaction transaction = transactionRepository.findById(event.transactionId()).orElse(null);
         if (transaction == null || transaction.getStatus() != TransactionStatus.PENDING) {
@@ -39,8 +38,7 @@ public class TransferSagaListener {
         }
     }
 
-    @KafkaListener(topics = "credit-results", groupId = "transfer-service-credit-results",
-            properties = "spring.json.value.default.type:com.loyalty.transfer.saga.events.CreditResultEvent")
+    @KafkaListener(topics = "credit-results", groupId = "transfer-service-credit-results")
     public void onCreditResult(CreditResultEvent event) {
         Transaction transaction = transactionRepository.findById(event.transactionId()).orElse(null);
         if (transaction == null || transaction.getStatus() != TransactionStatus.PENDING) {
@@ -59,8 +57,7 @@ public class TransferSagaListener {
         }
     }
 
-    @KafkaListener(topics = "compensation-results", groupId = "transfer-service-compensation-results",
-            properties = "spring.json.value.default.type:com.loyalty.transfer.saga.events.CompensationResultEvent")
+    @KafkaListener(topics = "compensation-results", groupId = "transfer-service-compensation-results")
     public void onCompensationResult(com.loyalty.transfer.saga.events.CompensationResultEvent event) {
         Transaction transaction = transactionRepository.findById(event.transactionId()).orElse(null);
         if (transaction == null || transaction.getStatus() != TransactionStatus.COMPENSATING) {

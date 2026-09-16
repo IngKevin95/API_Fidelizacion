@@ -15,13 +15,15 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
-        spring.json.trusted.packages: "*"
-        spring.json.use.type.headers: false
+        spring.json.trusted.packages: "com.loyalty.*"
+        spring.json.use.type.headers: true
+        spring.json.type.mapping: "debitResult:com.loyalty.transfer.saga.events.DebitResultEvent,creditResult:com.loyalty.transfer.saga.events.CreditResultEvent,compensationResult:com.loyalty.transfer.saga.events.CompensationResultEvent,debitRequested:com.loyalty.transfer.saga.events.DebitRequestedEvent,creditRequested:com.loyalty.transfer.saga.events.CreditRequestedEvent,compensateDebit:com.loyalty.transfer.saga.events.CompensateDebitEvent"
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       properties:
-        spring.json.add.type.headers: false
+        spring.json.add.type.headers: true
+        spring.json.type.mapping: "debitRequested:com.loyalty.transfer.saga.events.DebitRequestedEvent,creditRequested:com.loyalty.transfer.saga.events.CreditRequestedEvent,compensateDebit:com.loyalty.transfer.saga.events.CompensateDebitEvent"
   security:
     oauth2:
       resourceserver:
