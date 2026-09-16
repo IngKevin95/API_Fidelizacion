@@ -119,7 +119,7 @@ class AccountControllerIT {
         account.setUpdatedAt(Instant.now());
         accountRepository.save(account);
 
-        accountRepository.creditIfActive("acc-ledger-test", 100L, "tx-seed-test");
+        accountRepository.creditIfActive("acc-ledger-test", 100L, "tx-seed-test", true);
 
         mockMvc.perform(get("/accounts/acc-ledger-test/ledger")
                         .with(jwt().jwt(j -> j.subject("user-1"))))

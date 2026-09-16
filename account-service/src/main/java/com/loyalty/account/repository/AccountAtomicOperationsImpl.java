@@ -69,7 +69,7 @@ public class AccountAtomicOperationsImpl implements AccountAtomicOperations {
 
     @Override
     @Transactional("transactionManager")
-    public boolean creditIfActive(String accountId, long amount, String transactionId) {
+    public boolean creditIfActive(String accountId, long amount, String transactionId, boolean fromTreasury) {
         Account before = mongoTemplate.findById(accountId, Account.class);
         if (before == null) {
             return false;
@@ -81,8 +81,7 @@ public class AccountAtomicOperationsImpl implements AccountAtomicOperations {
         boolean applied = mongoTemplate.updateFirst(query, update, Account.class).getModifiedCount() == 1;
         if (applied) {
             long balanceAfter = before.getBalance() + amount;
-            boolean isFirstCredit = ledgerRepository.countByAccountId(accountId) == 0;
-            BalanceLedgerEventType eventType = isFirstCredit ? BalanceLedgerEventType.SEED : BalanceLedgerEventType.CREDIT;
+            BalanceLedgerEventType eventType = fromTreasury ? BalanceLedgerEventType.SEED : BalanceLedgerEventType.CREDIT;
             ledgerRepository.save(new BalanceLedgerEntry(accountId, eventType, transactionId,
                     amount, before.getBalance(), balanceAfter));
         }

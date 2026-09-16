@@ -35,10 +35,11 @@ class TransferSagaPublisherTest {
     void publishesCreditRequestedToCreditEventsTopic() {
         TransferSagaPublisher publisher = new TransferSagaPublisher(kafkaTemplate);
 
-        publisher.publishCreditRequested("tx-1", "acc-2", 50L);
+        publisher.publishCreditRequested("tx-1", "acc-1", "acc-2", 50L);
 
         ArgumentCaptor<CreditRequestedEvent> captor = ArgumentCaptor.forClass(CreditRequestedEvent.class);
         verify(kafkaTemplate).send(org.mockito.ArgumentMatchers.eq("credit-events"), org.mockito.ArgumentMatchers.eq("tx-1"), captor.capture());
+        assertThat(captor.getValue().sourceAccountId()).isEqualTo("acc-1");
         assertThat(captor.getValue().targetAccountId()).isEqualTo("acc-2");
     }
 
