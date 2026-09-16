@@ -41,6 +41,11 @@ public class GlobalExceptionHandler {
         return body(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "No autorizado para realizar esta operacion");
     }
 
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleMalformedBody(org.springframework.http.converter.HttpMessageNotReadableException ex) {
+        return body(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "Payload invalido o malformado");
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleUnexpected(Exception ex) {
         log.error("Error no controlado", ex);

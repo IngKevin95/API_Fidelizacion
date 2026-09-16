@@ -33,6 +33,17 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void mapsMalformedBodyTo400NotInternalError() {
+        org.springframework.http.converter.HttpMessageNotReadableException ex =
+                new org.springframework.http.converter.HttpMessageNotReadableException("JSON parse error", (org.springframework.http.HttpInputMessage) null);
+
+        ResponseEntity<Map<String, Object>> response = handler.handleMalformedBody(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).containsEntry("code", "VALIDATION_ERROR");
+    }
+
+    @Test
     void handlesUnexpectedExceptionWithGenericFormat() {
         RuntimeException ex = new RuntimeException("detalle interno sensible");
 
