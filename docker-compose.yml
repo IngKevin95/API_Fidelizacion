@@ -7,6 +7,14 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    # SEGURIDAD: puerto expuesto solo a localhost (127.0.0.1) para poder
+    # inspeccionar la BD desde herramientas graficas (Compass) en desarrollo.
+    # Mongo NO tiene autenticacion habilitada en este entorno, asi que este
+    # bind debe permanecer restringido a localhost y JAMAS cambiarse a
+    # "27017:27017" (0.0.0.0), lo que expondria la BD sin credenciales a
+    # cualquier host que alcance esta maquina en la red.
+    ports:
+      - "127.0.0.1:27017:27017"
 
   mongo-init:
     image: mongo:7
