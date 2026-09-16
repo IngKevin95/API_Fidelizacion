@@ -46,7 +46,19 @@ class AccountServiceTest {
 
         ArgumentCaptor<Account> captor = ArgumentCaptor.forClass(Account.class);
         verify(accountRepository).save(captor.capture());
-        assertThat(captor.getValue().getId()).startsWith("acc-");
+        assertThat(captor.getValue().getId()).matches("acc-\\d{10}");
+    }
+
+    @Test
+    void createRetriesWithNewNumberWhenGeneratedIdAlreadyExists() {
+        when(accountRepository.existsById(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(true, false);
+        when(accountRepository.save(any(Account.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Account created = accountService.create("user-1");
+
+        assertThat(created.getId()).matches("acc-\\d{10}");
+        org.mockito.Mockito.verify(accountRepository, org.mockito.Mockito.times(2)).existsById(org.mockito.ArgumentMatchers.anyString());
     }
 
     @Test
