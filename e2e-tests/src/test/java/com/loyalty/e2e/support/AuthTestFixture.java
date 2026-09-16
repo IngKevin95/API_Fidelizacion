@@ -30,4 +30,15 @@ public final class AuthTestFixture {
 
         return new RegisteredUser(username, password, accessToken);
     }
+
+    public static String loginAsTestAdmin() {
+        String accessToken = ApiClient.gateway()
+                .body("{\"username\":\"test-admin\",\"password\":\"TestAdmin123!\"}")
+                .post("/auth/login")
+                .then()
+                .statusCode(200)
+                .extract().path("accessToken");
+
+        return "Bearer " + accessToken;
+    }
 }
