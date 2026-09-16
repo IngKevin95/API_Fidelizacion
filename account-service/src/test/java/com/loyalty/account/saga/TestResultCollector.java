@@ -17,20 +17,17 @@ public class TestResultCollector {
     private final LinkedBlockingQueue<CreditResultEvent> creditResults = new LinkedBlockingQueue<>();
     private final LinkedBlockingQueue<CompensationResultEvent> compensationResults = new LinkedBlockingQueue<>();
 
-    @KafkaListener(topics = "debit-results", groupId = "test-collector-debit",
-            properties = "spring.json.value.default.type:com.loyalty.account.saga.events.DebitResultEvent")
+    @KafkaListener(topics = "debit-results", groupId = "test-collector-debit")
     public void onDebitResult(DebitResultEvent event) {
         debitResults.add(event);
     }
 
-    @KafkaListener(topics = "credit-results", groupId = "test-collector-credit",
-            properties = "spring.json.value.default.type:com.loyalty.account.saga.events.CreditResultEvent")
+    @KafkaListener(topics = "credit-results", groupId = "test-collector-credit")
     public void onCreditResult(CreditResultEvent event) {
         creditResults.add(event);
     }
 
-    @KafkaListener(topics = "compensation-results", groupId = "test-collector-compensation",
-            properties = "spring.json.value.default.type:com.loyalty.account.saga.events.CompensationResultEvent")
+    @KafkaListener(topics = "compensation-results", groupId = "test-collector-compensation")
     public void onCompensationResult(CompensationResultEvent event) {
         compensationResults.add(event);
     }
