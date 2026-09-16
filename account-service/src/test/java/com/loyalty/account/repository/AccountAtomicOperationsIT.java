@@ -89,6 +89,24 @@ class AccountAtomicOperationsIT {
     }
 
     @Test
+    void debitSucceedsArbitrarilyBelowZeroWhenMinBalanceIsNull() {
+        Account treasury = new Account();
+        treasury.setId("acc-treasury-null-test");
+        treasury.setOwnerId("system");
+        treasury.setBalance(0L);
+        treasury.setMinBalance(null);
+        treasury.setStatus(AccountStatus.ACTIVE);
+        treasury.setCreatedAt(Instant.now());
+        treasury.setUpdatedAt(Instant.now());
+        accountRepository.save(treasury);
+
+        DebitOutcome outcome = accountRepository.debitIfSufficientBalance("acc-treasury-null-test", 500L, "tx-3b");
+
+        assertThat(outcome.isSuccess()).isTrue();
+        assertThat(accountRepository.findById("acc-treasury-null-test").orElseThrow().getBalance()).isEqualTo(-500L);
+    }
+
+    @Test
     void debitFailsWhenAccountInactive() {
         saveAccount("acc-3", 100L, 0L, AccountStatus.INACTIVE);
 

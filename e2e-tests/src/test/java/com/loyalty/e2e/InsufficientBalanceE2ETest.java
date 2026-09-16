@@ -1,5 +1,6 @@
 package com.loyalty.e2e;
 
+import com.loyalty.e2e.support.AdminTransferFixture;
 import com.loyalty.e2e.support.ApiClient;
 import com.loyalty.e2e.support.AuthTestFixture;
 import org.junit.jupiter.api.Test;
@@ -15,17 +16,19 @@ class InsufficientBalanceE2ETest {
 
         String sourceAccountId = ApiClient.gateway()
                 .header("Authorization", token)
-                .body("{\"balance\": 10}")
+                .body("{}")
                 .post("/accounts")
                 .then().statusCode(201)
                 .extract().path("id");
 
         String targetAccountId = ApiClient.gateway()
                 .header("Authorization", token)
-                .body("{\"balance\": 0}")
+                .body("{}")
                 .post("/accounts")
                 .then().statusCode(201)
                 .extract().path("id");
+
+        AdminTransferFixture.fundAccount(sourceAccountId, 10);
 
         ApiClient.gateway()
                 .header("Authorization", token)

@@ -1,5 +1,6 @@
 package com.loyalty.e2e;
 
+import com.loyalty.e2e.support.AdminTransferFixture;
 import com.loyalty.e2e.support.ApiClient;
 import com.loyalty.e2e.support.AuthTestFixture;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -23,17 +24,19 @@ class IdempotencyE2ETest {
 
         String sourceAccountId = ApiClient.gateway()
                 .header("Authorization", token)
-                .body("{\"balance\": 100}")
+                .body("{}")
                 .post("/accounts")
                 .then().statusCode(201)
                 .extract().path("id");
 
         String targetAccountId = ApiClient.gateway()
                 .header("Authorization", token)
-                .body("{\"balance\": 0}")
+                .body("{}")
                 .post("/accounts")
                 .then().statusCode(201)
                 .extract().path("id");
+
+        AdminTransferFixture.fundAccount(sourceAccountId, 100);
 
         String transactionId = ApiClient.gateway()
                 .header("Authorization", token)

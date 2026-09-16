@@ -1,5 +1,6 @@
 package com.loyalty.e2e;
 
+import com.loyalty.e2e.support.AdminTransferFixture;
 import com.loyalty.e2e.support.ApiClient;
 import com.loyalty.e2e.support.AuthTestFixture;
 import org.junit.jupiter.api.Test;
@@ -18,14 +19,14 @@ class CompensationE2ETest {
 
         String sourceAccountId = ApiClient.gateway()
                 .header("Authorization", token)
-                .body("{\"balance\": 100}")
+                .body("{}")
                 .post("/accounts")
                 .then().statusCode(201)
                 .extract().path("id");
 
         String targetAccountId = ApiClient.gateway()
                 .header("Authorization", token)
-                .body("{\"balance\": 0}")
+                .body("{}")
                 .post("/accounts")
                 .then().statusCode(201)
                 .extract().path("id");
@@ -40,6 +41,8 @@ class CompensationE2ETest {
         // aceptable: en ese caso la carrera nunca se dispara y el test
         // simplemente verifica el flujo feliz como invariante base.
         deactivator.start();
+
+        AdminTransferFixture.fundAccount(sourceAccountId, 100);
 
         String transactionId = ApiClient.gateway()
                 .header("Authorization", token)
