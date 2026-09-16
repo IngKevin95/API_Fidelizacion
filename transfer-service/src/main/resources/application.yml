@@ -9,6 +9,11 @@ spring:
       uri: mongodb://mongo:27017/transfer_service?replicaSet=rs0
   kafka:
     bootstrap-servers: kafka:9092
+    security:
+      protocol: SASL_PLAINTEXT
+    properties:
+      sasl.mechanism: SCRAM-SHA-256
+      sasl.jaas.config: org.apache.kafka.common.security.scram.ScramLoginModule required username="transfer-service" password="${KAFKA_TRANSFER_SERVICE_PASSWORD:transfer-service-secret}";
     consumer:
       group-id: transfer-service
       auto-offset-reset: earliest
