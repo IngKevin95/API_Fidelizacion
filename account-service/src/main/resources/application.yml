@@ -9,11 +9,6 @@ spring:
       uri: mongodb://mongo:27017/account_service?replicaSet=rs0
   kafka:
     bootstrap-servers: kafka:9092
-    security:
-      protocol: SASL_PLAINTEXT
-    properties:
-      sasl.mechanism: SCRAM-SHA-256
-      sasl.jaas.config: org.apache.kafka.common.security.scram.ScramLoginModule required username="account-service" password="${KAFKA_ACCOUNT_SERVICE_PASSWORD:account-service-secret}";
     consumer:
       group-id: account-service
       auto-offset-reset: earliest
