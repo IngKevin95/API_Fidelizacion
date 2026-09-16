@@ -1,0 +1,35 @@
+server:
+  port: 8080
+
+cors:
+  allowed-origins: "*"
+
+spring:
+  application:
+    name: gateway
+  cloud:
+    gateway:
+      routes:
+        - id: auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/auth/**
+        - id: account-service
+          uri: lb://account-service
+          predicates:
+            - Path=/accounts/**
+        - id: transfer-service
+          uri: lb://transfer-service
+          predicates:
+            - Path=/api/v1/points/**
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://eureka-server:8761/eureka/
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

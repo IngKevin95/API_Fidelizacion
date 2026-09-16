@@ -1,0 +1,565 @@
+### Loyalty Microservice Platform — pruebas manuales de todos los endpoints (positivos y negativos)
+###
+### Formato: REST Client (extension de VS Code). Cada bloque separado por "###".
+### Los bloques marcados con "# @name X" capturan la respuesta para reusar campos
+### (token, id) en bloques posteriores via {{X.response.body.$.campo}}.
+###
+### Requisitos: stack levantado con `docker-compose up -d --build` (ver docs/GUIA_PRUEBAS.md).
+### Todo pasa por el gateway (localhost:8080) salvo la seccion final marcada como
+### "acceso directo a transfer-service" (endpoint no enrutado por el gateway).
+###
+### Uso rapido: correr los bloques en orden de arriba hacia abajo la primera vez
+### (algunos dependen del id/token capturado por bloques anteriores). Los usuarios
+### se generan con nombre aleatorio ({{$guid}}) para poder re-ejecutar el archivo
+### completo sin colisiones de "username ya existe".
+
+@baseUrl = http://localhost:8080
+@userPassword = Test1234!
+@username = user-{{$guid}}
+@otherUsername = other-{{$guid}}
+
+
+###############################################################################
+# 1. AUTH-SERVICE — POST /auth/register
+###############################################################################
+
+### 1.1 [POSITIVO] Registro exitoso -> 201 sin body
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "username": "{{username}}",
+  "email": "{{username}}@loyalty.local",
+  "password": "{{userPassword}}"
+}
+
+### 1.2 [NEGATIVO] Username duplicado -> 409 USER_ALREADY_EXISTS
+# Correr 1.1 primero, luego este bloque con el mismo username
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "username": "{{username}}",
+  "email": "otro-email-{{$guid}}@loyalty.local",
+  "password": "{{userPassword}}"
+}
+
+### 1.3 [NEGATIVO] Username en blanco -> 400 VALIDATION_ERROR (username: must not be blank)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "username": "",
+  "email": "valido-{{$guid}}@loyalty.local",
+  "password": "{{userPassword}}"
+}
+
+### 1.4 [NEGATIVO] Email invalido -> 400 VALIDATION_ERROR (email: must be a well-formed email address)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "username": "email-invalido-{{$guid}}",
+  "email": "no-es-un-email",
+  "password": "{{userPassword}}"
+}
+
+### 1.5 [NEGATIVO] Password muy corta (< 8 caracteres) -> 400 VALIDATION_ERROR (password: size must be between 8 and ...)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "username": "pass-corta-{{$guid}}",
+  "email": "pass-corta-{{$guid}}@loyalty.local",
+  "password": "abc123"
+}
+
+### 1.6 [NEGATIVO] Email en blanco -> 400 VALIDATION_ERROR
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "username": "sin-email-{{$guid}}",
+  "email": "",
+  "password": "{{userPassword}}"
+}
+
+### 1.7 [NEGATIVO] Body vacio -> 400 VALIDATION_ERROR (falla en el primer campo, username)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{}
+
+
+###############################################################################
+# 2. AUTH-SERVICE — POST /auth/login
+###############################################################################
+
+### 2.1 [POSITIVO] Login exitoso -> 200 con accessToken. Captura el token para las secciones siguientes.
+# @name loginUser
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "{{username}}",
+  "password": "{{userPassword}}"
+}
+
+### 2.2 [POSITIVO] Login del segundo usuario (para escenarios de ownership de la seccion 3/5)
+# Requiere haber registrado {{otherUsername}} primero (duplicar el bloque 1.1 con otherUsername)
+# @name loginOtherUser
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "{{otherUsername}}",
+  "password": "{{userPassword}}"
+}
+
+### 2.3 [POSITIVO] Login como admin (usuario sembrado en Keycloak, ver docker/keycloak/loyalty-realm.json)
+# @name loginAdmin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "test-admin",
+  "password": "TestAdmin123!"
+}
+
+### 2.4 [NEGATIVO] Password incorrecta -> 401 INVALID_CREDENTIALS
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "{{username}}",
+  "password": "PasswordIncorrecta1!"
+}
+
+### 2.5 [NEGATIVO] Usuario inexistente -> 401 INVALID_CREDENTIALS
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "usuario-que-no-existe-{{$guid}}",
+  "password": "{{userPassword}}"
+}
+
+### 2.6 [NEGATIVO] Username en blanco -> 400 VALIDATION_ERROR
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "",
+  "password": "{{userPassword}}"
+}
+
+### 2.7 [NEGATIVO] Body vacio -> 400 VALIDATION_ERROR
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{}
+
+
+###############################################################################
+# 3. ACCOUNT-SERVICE — POST /accounts
+###############################################################################
+
+### 3.1 [POSITIVO] Crear cuenta como USER -> 201, balance=0, minBalance=0
+# @name createAccount
+POST {{baseUrl}}/accounts
+Authorization: Bearer {{loginUser.response.body.$.accessToken}}
+Content-Type: application/json
+
+{}
+
+### 3.2 [POSITIVO] Crear segunda cuenta con el mismo usuario (para transferencias entre cuentas propias)
+# @name createSecondAccount
+POST {{baseUrl}}/accounts
+Authorization: Bearer {{loginUser.response.body.$.accessToken}}
+Content-Type: application/json
+
+{}
+
+### 3.3 [POSITIVO] Crear cuenta del segundo usuario (para escenarios de ownership)
+# @name createOtherAccount
+POST {{baseUrl}}/accounts
+Authorization: Bearer {{loginOtherUser.response.body.$.accessToken}}
+Content-Type: application/json
+
+{}
+
+### 3.4 [NEGATIVO] Sin token -> 401
+POST {{baseUrl}}/accounts
+Content-Type: application/json
+
+{}
+
+### 3.5 [NEGATIVO] Token invalido/corrupto -> 401
+POST {{baseUrl}}/accounts
+Authorization: Bearer token-invalido-y-no-un-jwt
+Content-Type: application/json
+
+{}
+
+### 3.6 [NEGATIVO] Como ADMIN puro (sin rol USER) -> 403, PATRON: @PreAuthorize("hasRole('USER')") no incluye ADMIN aqui
+POST {{baseUrl}}/accounts
+Authorization: Bearer {{loginAdmin.response.body.$.accessToken}}
+Content-Type: application/json
+
+{}
+
+### 3.7 [NEGATIVO] Body con campo desconocido "balance" -> 201 igual (Jackson ignora campos no mapeados; el contrato ya no admite saldo inicial, ver spec balance_ledger D3)
+POST {{baseUrl}}/accounts
+Authorization: Bearer {{loginUser.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "balance": 999999
+}
+
+
+###############################################################################
+# 4. ACCOUNT-SERVICE — GET /accounts/{id}
+###############################################################################
+
+### 4.1 [POSITIVO] Dueño consulta su propia cuenta -> 200
+GET {{baseUrl}}/accounts/{{createAccount.response.body.$.id}}
+Authorization: Bearer {{loginUser.response.body.$.accessToken}}
+
+### 4.2 [POSITIVO] Admin consulta cualquier cuenta -> 200
+GET {{baseUrl}}/accounts/{{createAccount.response.body.$.id}}
+Authorization: Bearer {{loginAdmin.response.body.$.accessToken}}
+
+### 4.3 [POSITIVO] Admin consulta la cuenta de tesoreria -> 200, balance negativo o 0, minBalance null
+GET {{baseUrl}}/accounts/acc-treasury
+Authorization: Bearer {{loginAdmin.response.body.$.accessToken}}
+
+### 4.4 [NEGATIVO] Otro usuario (no dueño, no admin) consulta la cuenta -> 403
+GET {{baseUrl}}/accounts/{{createAccount.response.body.$.id}}
+Authorization: Bearer {{loginOtherUser.response.body.$.accessToken}}
+
+### 4.5 [NEGATIVO] Cuenta inexistente -> 404 ACCOUNT_NOT_FOUND
+GET {{baseUrl}}/accounts/acc-no-existe-12345
+Authorization: Bearer {{loginUser.response.body.$.accessToken}}
+
+### 4.6 [NEGATIVO] Sin token -> 401
+GET {{baseUrl}}/accounts/{{createAccount.response.body.$.id}}
+
+
+###############################################################################
+# 5. ACCOUNT-SERVICE — PATCH /accounts/{id}/status  (solo ADMIN)
+###############################################################################
+
+### 5.1 [POSITIVO] Admin desactiva una cuenta -> 200, status=INACTIVE
+PATCH {{baseUrl}}/accounts/{{createOtherAccount.response.body.$.id}}/status
+Authorization: Bearer {{loginAdmin.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "status": "INACTIVE"
+}
+
+### 5.2 [POSITIVO] Admin reactiva la cuenta -> 200, status=ACTIVE (dejarla lista para otros escenarios)
+PATCH {{baseUrl}}/accounts/{{createOtherAccount.response.body.$.id}}/status
+Authorization: Bearer {{loginAdmin.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "status": "ACTIVE"
+}
+
+### 5.3 [NEGATIVO] Como USER (no admin) -> 403
+PATCH {{baseUrl}}/accounts/{{createAccount.response.body.$.id}}/status
+Authorization: Bearer {{loginUser.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "status": "INACTIVE"
+}
+
+### 5.4 [NEGATIVO] Valor de status invalido (no existe en el enum) -> 400 VALIDATION_ERROR
+PATCH {{baseUrl}}/accounts/{{createAccount.response.body.$.id}}/status
+Authorization: Bearer {{loginAdmin.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "status": "SUSPENDIDA"
+}
+
+### 5.5 [NEGATIVO] status ausente (null) -> 400 VALIDATION_ERROR (status: must not be null)
+PATCH {{baseUrl}}/accounts/{{createAccount.response.body.$.id}}/status
+Authorization: Bearer {{loginAdmin.response.body.$.accessToken}}
+Content-Type: application/json
+
+{}
+
+### 5.6 [NEGATIVO] Cuenta inexistente -> 404 ACCOUNT_NOT_FOUND
+PATCH {{baseUrl}}/accounts/acc-no-existe-12345/status
+Authorization: Bearer {{loginAdmin.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "status": "INACTIVE"
+}
+
+
+###############################################################################
+# 6. ACCOUNT-SERVICE — PATCH /accounts/{id}/limits  (solo ADMIN)
+###############################################################################
+
+### 6.1 [POSITIVO] Admin ajusta minBalance de una cuenta normal (pocket / reserva protegida) -> 200
+PATCH {{baseUrl}}/accounts/{{createSecondAccount.response.body.$.id}}/limits
+Authorization: Bearer {{loginAdmin.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "minBalance": 0
+}
+
+### 6.2 [POSITIVO] Admin ajusta minBalance de acc-treasury (sin piso -> muy negativo, ej -1000000) -> 200
+PATCH {{baseUrl}}/accounts/acc-treasury/limits
+Authorization: Bearer {{loginAdmin.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "minBalance": -1000000
+}
+
+### 6.3 [NEGATIVO] Como USER (no admin) -> 403
+PATCH {{baseUrl}}/accounts/{{createAccount.response.body.$.id}}/limits
+Authorization: Bearer {{loginUser.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "minBalance": 0
+}
+
+### 6.4 [NEGATIVO] minBalance ausente -> 400 VALIDATION_ERROR (minBalance: must not be null)
+PATCH {{baseUrl}}/accounts/{{createAccount.response.body.$.id}}/limits
+Authorization: Bearer {{loginAdmin.response.body.$.accessToken}}
+Content-Type: application/json
+
+{}
+
+### 6.5 [NEGATIVO] Cuenta inexistente -> 404 ACCOUNT_NOT_FOUND
+PATCH {{baseUrl}}/accounts/acc-no-existe-12345/limits
+Authorization: Bearer {{loginAdmin.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "minBalance": 0
+}
+
+
+###############################################################################
+# 7. TRANSFER-SERVICE (via gateway) — POST /api/v1/points/transfer
+###############################################################################
+
+### 7.1 [POSITIVO] Admin fondea la cuenta del usuario desde acc-treasury -> 202 PENDING
+# Requiere haber corrido 6.2 primero (minBalance de acc-treasury sin piso real)
+# @name fundAccount
+POST {{baseUrl}}/api/v1/points/transfer
+Authorization: Bearer {{loginAdmin.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "sourceAccountId": "acc-treasury",
+  "targetAccountId": "{{createAccount.response.body.$.id}}",
+  "amount": 100
+}
+
+### 7.2 [POSITIVO] Transferencia normal entre 2 cuentas del mismo usuario -> 202 PENDING
+# Correr 7.1 primero y esperar unos segundos a que la saga complete el fondeo
+# @name transferBetweenAccounts
+POST {{baseUrl}}/api/v1/points/transfer
+Authorization: Bearer {{loginUser.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "sourceAccountId": "{{createAccount.response.body.$.id}}",
+  "targetAccountId": "{{createSecondAccount.response.body.$.id}}",
+  "amount": 40
+}
+
+### 7.3 [NEGATIVO] Cuenta origen y destino iguales -> 400 SAME_ACCOUNT
+POST {{baseUrl}}/api/v1/points/transfer
+Authorization: Bearer {{loginUser.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "sourceAccountId": "{{createAccount.response.body.$.id}}",
+  "targetAccountId": "{{createAccount.response.body.$.id}}",
+  "amount": 10
+}
+
+### 7.4 [NEGATIVO] Saldo insuficiente (monto mayor al balance real) -> 422 INSUFFICIENT_BALANCE
+POST {{baseUrl}}/api/v1/points/transfer
+Authorization: Bearer {{loginUser.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "sourceAccountId": "{{createAccount.response.body.$.id}}",
+  "targetAccountId": "{{createSecondAccount.response.body.$.id}}",
+  "amount": 999999999
+}
+
+### 7.5 [NEGATIVO] Cuenta origen inactiva -> 422 SOURCE_INACTIVE
+# Antes de correr esto: desactivar createOtherAccount con un PATCH .../status {"status":"INACTIVE"} (ver 5.1)
+POST {{baseUrl}}/api/v1/points/transfer
+Authorization: Bearer {{loginOtherUser.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "sourceAccountId": "{{createOtherAccount.response.body.$.id}}",
+  "targetAccountId": "{{createAccount.response.body.$.id}}",
+  "amount": 10
+}
+
+### 7.6 [NEGATIVO] Cuenta destino inactiva -> 422 TARGET_INACTIVE
+POST {{baseUrl}}/api/v1/points/transfer
+Authorization: Bearer {{loginUser.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "sourceAccountId": "{{createAccount.response.body.$.id}}",
+  "targetAccountId": "{{createOtherAccount.response.body.$.id}}",
+  "amount": 10
+}
+
+### 7.7 [NEGATIVO] Cuenta origen inexistente -> 404 ACCOUNT_NOT_FOUND
+POST {{baseUrl}}/api/v1/points/transfer
+Authorization: Bearer {{loginUser.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "sourceAccountId": "acc-no-existe-12345",
+  "targetAccountId": "{{createSecondAccount.response.body.$.id}}",
+  "amount": 10
+}
+
+### 7.8 [NEGATIVO] Monto negativo -> 400 VALIDATION_ERROR (amount: must be positive)
+POST {{baseUrl}}/api/v1/points/transfer
+Authorization: Bearer {{loginUser.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "sourceAccountId": "{{createAccount.response.body.$.id}}",
+  "targetAccountId": "{{createSecondAccount.response.body.$.id}}",
+  "amount": -10
+}
+
+### 7.9 [NEGATIVO] Monto cero -> 400 VALIDATION_ERROR (amount: must be positive)
+POST {{baseUrl}}/api/v1/points/transfer
+Authorization: Bearer {{loginUser.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "sourceAccountId": "{{createAccount.response.body.$.id}}",
+  "targetAccountId": "{{createSecondAccount.response.body.$.id}}",
+  "amount": 0
+}
+
+### 7.10 [NEGATIVO] sourceAccountId en blanco -> 400 VALIDATION_ERROR (sourceAccountId: must not be blank)
+POST {{baseUrl}}/api/v1/points/transfer
+Authorization: Bearer {{loginUser.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "sourceAccountId": "",
+  "targetAccountId": "{{createSecondAccount.response.body.$.id}}",
+  "amount": 10
+}
+
+### 7.11 [NEGATIVO] Body vacio -> 400 VALIDATION_ERROR (falla en el primer campo)
+POST {{baseUrl}}/api/v1/points/transfer
+Authorization: Bearer {{loginUser.response.body.$.accessToken}}
+Content-Type: application/json
+
+{}
+
+### 7.12 [NEGATIVO] Sin token -> 401
+POST {{baseUrl}}/api/v1/points/transfer
+Content-Type: application/json
+
+{
+  "sourceAccountId": "{{createAccount.response.body.$.id}}",
+  "targetAccountId": "{{createSecondAccount.response.body.$.id}}",
+  "amount": 10
+}
+
+### 7.13 [NOTA] No existe chequeo de ownership del lado de transfer-service para sourceAccountId:
+# cualquier usuario autenticado con rol USER/ADMIN puede pedir transferir DESDE una cuenta que
+# no es suya (la saga la ejecuta igual si el saldo/estado lo permiten). Este es un hallazgo
+# documentado en la auditoria 2026-09-15 pendiente de backlog, no un bug de este archivo.
+
+
+###############################################################################
+# 8. ACCOUNT-SERVICE — GET /accounts/{id}/transactions  (delega a transfer-service)
+###############################################################################
+
+### 8.1 [POSITIVO] Dueño consulta su historial de transacciones -> 200
+# Correr despues de 7.1/7.2 y esperar unos segundos a que la saga complete
+GET {{baseUrl}}/accounts/{{createAccount.response.body.$.id}}/transactions
+Authorization: Bearer {{loginUser.response.body.$.accessToken}}
+
+### 8.2 [POSITIVO] Admin consulta el historial de cualquier cuenta -> 200
+GET {{baseUrl}}/accounts/{{createAccount.response.body.$.id}}/transactions
+Authorization: Bearer {{loginAdmin.response.body.$.accessToken}}
+
+### 8.3 [NEGATIVO] Otro usuario (no dueño, no admin) -> 403
+GET {{baseUrl}}/accounts/{{createAccount.response.body.$.id}}/transactions
+Authorization: Bearer {{loginOtherUser.response.body.$.accessToken}}
+
+### 8.4 [NEGATIVO] Cuenta inexistente -> 404 ACCOUNT_NOT_FOUND
+GET {{baseUrl}}/accounts/acc-no-existe-12345/transactions
+Authorization: Bearer {{loginUser.response.body.$.accessToken}}
+
+### 8.5 [NEGATIVO] Sin token -> 401
+GET {{baseUrl}}/accounts/{{createAccount.response.body.$.id}}/transactions
+
+
+###############################################################################
+# 9. ACCOUNT-SERVICE — GET /accounts/{id}/ledger  (kardex de auditoria)
+###############################################################################
+
+### 9.1 [POSITIVO] Dueño consulta su propio ledger -> 200, primer movimiento eventType=SEED si vino de acc-treasury
+GET {{baseUrl}}/accounts/{{createAccount.response.body.$.id}}/ledger
+Authorization: Bearer {{loginUser.response.body.$.accessToken}}
+
+### 9.2 [POSITIVO] Admin consulta el ledger de acc-treasury -> 200, entradas DEBIT en negativo
+GET {{baseUrl}}/accounts/acc-treasury/ledger
+Authorization: Bearer {{loginAdmin.response.body.$.accessToken}}
+
+### 9.3 [NEGATIVO] Otro usuario (no dueño, no admin) -> 403
+GET {{baseUrl}}/accounts/{{createAccount.response.body.$.id}}/ledger
+Authorization: Bearer {{loginOtherUser.response.body.$.accessToken}}
+
+### 9.4 [NEGATIVO] Cuenta inexistente -> 404 ACCOUNT_NOT_FOUND
+GET {{baseUrl}}/accounts/acc-no-existe-12345/ledger
+Authorization: Bearer {{loginUser.response.body.$.accessToken}}
+
+### 9.5 [NEGATIVO] Sin token -> 401
+GET {{baseUrl}}/accounts/{{createAccount.response.body.$.id}}/ledger
+
+
+###############################################################################
+# 10. TRANSFER-SERVICE — GET /transactions?accountId=  (acceso directo, NO enrutado por el gateway)
+###############################################################################
+# Este endpoint no aparece en gateway/src/main/resources/application.yml (solo se enrutan
+# /auth/**, /accounts/**, /api/v1/points/**), y desde la Task 8 de la auditoria el puerto
+# 8082 de transfer-service ya NO esta expuesto al host. Por diseno, solo es alcanzable desde
+# otro contenedor de la red interna de Docker (asi lo usa account-service via TransferClient).
+# Para probarlo manualmente hay que hacerlo desde dentro de la red, ej.:
+#   docker run --rm --network api_fidelizacion_default curlimages/curl \
+#     curl -H "Authorization: Bearer <token>" "http://transfer-service:8082/transactions?accountId=acc-xxx"
+# Los escenarios positivos/negativos de este endpoint (dueño 200, no-dueño 403, pasa por
+# AccountClient.fetchAccount para el chequeo de ownership) ya estan cubiertos por
+# transfer-service/src/test/java/com/loyalty/transfer/controller/TransactionQueryControllerIT.java
+
+
+###############################################################################
+# 11. GATEWAY — health check
+###############################################################################
+
+### 11.1 [POSITIVO] Health del gateway -> 200 UP
+GET {{baseUrl}}/actuator/health

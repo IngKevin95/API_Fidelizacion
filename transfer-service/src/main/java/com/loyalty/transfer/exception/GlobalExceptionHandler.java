@@ -1,0 +1,72 @@
+package com.loyalty.transfer.exception;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(SameAccountException.class)
+    public ResponseEntity<Map<String, Object>> handleSameAccount(SameAccountException ex) {
+        return body(HttpStatus.BAD_REQUEST, "SAME_ACCOUNT", ex.getMessage());
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {
+        String message = ex.getBindingResult().getFieldErrors().stream()
+                .findFirst()
+                .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
+                .orElse("Payload invalido");
+        return body(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", message);
+    }
+
+    @ExceptionHandler(AccountNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleAccountNotFound(AccountNotFoundException ex) {
+        return body(HttpStatus.NOT_FOUND, "ACCOUNT_NOT_FOUND", ex.getMessage());
+    }
+
+    @ExceptionHandler(TransferAccessDeniedException.class)
+    public ResponseEntity<Map<String, Object>> handleAccessDenied(TransferAccessDeniedException ex) {
+        return body(HttpStatus.FORBIDDEN, "ACCESS_DENIED", ex.getMessage());
+    }
+
+    @ExceptionHandler(TransferUnprocessableException.class)
+    public ResponseEntity<Map<String, Object>> handleUnprocessable(TransferUnprocessableException ex) {
+        return body(HttpStatus.UNPROCESSABLE_ENTITY, ex.getCode(), ex.getMessage());
+    }
+
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<Map<String, Object>> handleSecurityAccessDenied(org.springframework.security.access.AccessDeniedException ex) {
+        return body(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "No autorizado para realizar esta operacion");
+    }
+
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleMalformedBody(org.springframework.http.converter.HttpMessageNotReadableException ex) {
+        return body(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "Payload invalido o malformado");
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Map<String, Object>> handleUnexpected(Exception ex) {
+        log.error("Error no controlado", ex);
+        return body(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "Ocurrio un error inesperado");
+    }
+
+    private ResponseEntity<Map<String, Object>> body(HttpStatus status, String code, String message) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("code", code);
+        payload.put("message", message);
+        payload.put("timestamp", Instant.now().toString());
+        return ResponseEntity.status(status).body(payload);
+    }
+}
