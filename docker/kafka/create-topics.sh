@@ -9,7 +9,7 @@ until "$KAFKA_TOPICS_BIN" --bootstrap-server "$KAFKA_HOST" --list > /dev/null 2>
   sleep 1
 done
 
-for topic in debit-events credit-events transfer-compensation debit-results credit-results; do
+for topic in debit-events credit-events transfer-compensation debit-results credit-results compensation-results; do
   echo "Creando topic: $topic"
   "$KAFKA_TOPICS_BIN" --bootstrap-server "$KAFKA_HOST" \
     --create --if-not-exists \

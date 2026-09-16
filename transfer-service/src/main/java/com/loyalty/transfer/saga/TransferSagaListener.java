@@ -53,8 +53,22 @@ public class TransferSagaListener {
             transactionRepository.save(transaction);
         } else {
             publisher.publishCompensateDebit(transaction.getId(), transaction.getSourceAccountId(), transaction.getAmount());
-            transaction.setStatus(TransactionStatus.FAILED);
+            transaction.setStatus(TransactionStatus.COMPENSATING);
             transaction.setFailureReason(event.reason());
+            transactionRepository.save(transaction);
+        }
+    }
+
+    @KafkaListener(topics = "compensation-results", groupId = "transfer-service-compensation-results",
+            properties = "spring.json.value.default.type:com.loyalty.transfer.saga.events.CompensationResultEvent")
+    public void onCompensationResult(com.loyalty.transfer.saga.events.CompensationResultEvent event) {
+        Transaction transaction = transactionRepository.findById(event.transactionId()).orElse(null);
+        if (transaction == null || transaction.getStatus() != TransactionStatus.COMPENSATING) {
+            return;
+        }
+
+        if (event.success()) {
+            transaction.setStatus(TransactionStatus.FAILED);
             transaction.setCompletedAt(Instant.now());
             transactionRepository.save(transaction);
         }
