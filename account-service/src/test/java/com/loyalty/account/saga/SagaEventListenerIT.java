@@ -29,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers
 @SpringBootTest
-@EmbeddedKafka(partitions = 1, topics = {"debit-events", "credit-events", "transfer-compensation", "debit-results", "credit-results"})
+@EmbeddedKafka(partitions = 1, topics = {"debit-events", "credit-events", "transfer-compensation", "debit-results", "credit-results", "compensation-results"})
 @Import(TestResultCollector.class)
 class SagaEventListenerIT {
 
@@ -109,6 +109,20 @@ class SagaEventListenerIT {
         resultCollector.pollDebitResult(Duration.ofSeconds(10));
 
         assertThat(accountRepository.findById("acc-4").orElseThrow().getBalance()).isEqualTo(70L);
+    }
+
+    @Test
+    void compensateDebitPublishesCompensationResult() throws InterruptedException {
+        saveAccount("acc-5", 100L);
+
+        kafkaTemplate.send("transfer-compensation", "tx-5",
+                new com.loyalty.account.saga.events.CompensateDebitEvent("tx-5", "acc-5", 50L));
+
+        com.loyalty.account.saga.events.CompensationResultEvent result = resultCollector.pollCompensationResult(Duration.ofSeconds(10));
+
+        assertThat(result.transactionId()).isEqualTo("tx-5");
+        assertThat(result.success()).isTrue();
+        assertThat(accountRepository.findById("acc-5").orElseThrow().getBalance()).isEqualTo(150L);
     }
 
     private void saveAccount(String id, long balance) {

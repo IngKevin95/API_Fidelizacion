@@ -73,6 +73,7 @@ public class SagaEventListener {
             return;
         }
         accountRepository.creditUnconditionally(event.sourceAccountId(), event.amount(), event.transactionId());
+        publisher.publishCompensationResult(new com.loyalty.account.saga.events.CompensationResultEvent(event.transactionId(), true));
     }
 
     private boolean tryMarkProcessed(String idempotencyKey) {

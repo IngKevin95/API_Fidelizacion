@@ -25,7 +25,7 @@ import static org.awaitility.Awaitility.await;
 
 @Testcontainers
 @SpringBootTest
-@EmbeddedKafka(partitions = 1, topics = {"debit-events", "credit-events", "transfer-compensation", "debit-results", "credit-results"})
+@EmbeddedKafka(partitions = 1, topics = {"debit-events", "credit-events", "transfer-compensation", "debit-results", "credit-results", "compensation-results"})
 class TransferSagaListenerIT {
 
     @Container
@@ -90,15 +90,36 @@ class TransferSagaListenerIT {
     }
 
     @Test
-    void creditFailedTriggersCompensationAndMarksFailed() {
+    void creditFailedTriggersCompensationAndMarksCompensating() {
         savePending("tx-4", "acc-1", "acc-2", 40L);
 
         kafkaTemplate.send("credit-results", "tx-4", new CreditResultEvent("tx-4", false, "TARGET_INACTIVE"));
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             Transaction tx = transactionRepository.findById("tx-4").orElseThrow();
-            assertThat(tx.getStatus()).isEqualTo(TransactionStatus.FAILED);
+            assertThat(tx.getStatus()).isEqualTo(TransactionStatus.COMPENSATING);
             assertThat(tx.getFailureReason()).isEqualTo("TARGET_INACTIVE");
+            assertThat(tx.getCompletedAt()).isNull();
+        });
+    }
+
+    @Test
+    void compensationResultMarksTransactionFailed() {
+        Transaction tx = new Transaction();
+        tx.setId("tx-5");
+        tx.setSourceAccountId("acc-1");
+        tx.setTargetAccountId("acc-2");
+        tx.setAmount(40L);
+        tx.setStatus(TransactionStatus.COMPENSATING);
+        tx.setCreatedAt(Instant.now());
+        transactionRepository.save(tx);
+
+        kafkaTemplate.send("compensation-results", "tx-5", new com.loyalty.transfer.saga.events.CompensationResultEvent("tx-5", true));
+
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+            Transaction updatedTx = transactionRepository.findById("tx-5").orElseThrow();
+            assertThat(updatedTx.getStatus()).isEqualTo(TransactionStatus.FAILED);
+            assertThat(updatedTx.getCompletedAt()).isNotNull();
         });
     }
 

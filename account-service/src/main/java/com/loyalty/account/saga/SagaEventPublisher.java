@@ -1,5 +1,6 @@
 package com.loyalty.account.saga;
 
+import com.loyalty.account.saga.events.CompensationResultEvent;
 import com.loyalty.account.saga.events.CreditResultEvent;
 import com.loyalty.account.saga.events.DebitResultEvent;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -20,5 +21,9 @@ public class SagaEventPublisher {
 
     public void publishCreditResult(CreditResultEvent event) {
         kafkaTemplate.send("credit-results", event.transactionId(), event);
+    }
+
+    public void publishCompensationResult(CompensationResultEvent event) {
+        kafkaTemplate.send("compensation-results", event.transactionId(), event);
     }
 }
