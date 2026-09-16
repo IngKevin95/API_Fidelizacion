@@ -26,7 +26,8 @@ public class SagaEventListener {
         this.publisher = publisher;
     }
 
-    @KafkaListener(topics = "debit-events", groupId = "account-service-debit")
+    @KafkaListener(topics = "debit-events", groupId = "account-service-debit",
+            properties = "spring.json.value.default.type:com.loyalty.account.saga.events.DebitRequestedEvent")
     public void onDebitRequested(DebitRequestedEvent event) {
         if (event.sourceAccountId() == null) {
             return;
@@ -44,7 +45,8 @@ public class SagaEventListener {
         }
     }
 
-    @KafkaListener(topics = "credit-events", groupId = "account-service-credit")
+    @KafkaListener(topics = "credit-events", groupId = "account-service-credit",
+            properties = "spring.json.value.default.type:com.loyalty.account.saga.events.CreditRequestedEvent")
     public void onCreditRequested(CreditRequestedEvent event) {
         if (event.targetAccountId() == null) {
             return;
@@ -63,7 +65,8 @@ public class SagaEventListener {
         }
     }
 
-    @KafkaListener(topics = "transfer-compensation", groupId = "account-service-compensation")
+    @KafkaListener(topics = "transfer-compensation", groupId = "account-service-compensation",
+            properties = "spring.json.value.default.type:com.loyalty.account.saga.events.CompensateDebitEvent")
     public void onCompensateDebit(CompensateDebitEvent event) {
         String idempotencyKey = event.transactionId() + ":COMPENSATION";
         if (!tryMarkProcessed(idempotencyKey)) {

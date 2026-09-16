@@ -27,7 +27,7 @@ public class TransferController {
     }
 
     @PostMapping("/transfer")
-    @PreAuthorize("hasRole('USER')")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     public ResponseEntity<TransferResponse> transfer(@Valid @RequestBody TransferRequest request,
                                                       Authentication authentication) {
         JwtAuthenticationToken jwtAuth = (JwtAuthenticationToken) authentication;

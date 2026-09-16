@@ -130,6 +130,7 @@ class SagaEventListenerIT {
         account.setId(id);
         account.setOwnerId("owner");
         account.setBalance(balance);
+        account.setMinBalance(0L);
         account.setStatus(AccountStatus.ACTIVE);
         account.setCreatedAt(Instant.now());
         account.setUpdatedAt(Instant.now());
