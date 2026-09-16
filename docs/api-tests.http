@@ -9,14 +9,22 @@
 ### "acceso directo a transfer-service" (endpoint no enrutado por el gateway).
 ###
 ### Uso rapido: correr los bloques en orden de arriba hacia abajo la primera vez
-### (algunos dependen del id/token capturado por bloques anteriores). Los usuarios
-### se generan con nombre aleatorio ({{$guid}}) para poder re-ejecutar el archivo
-### completo sin colisiones de "username ya existe".
+### (algunos dependen del id/token capturado por bloques anteriores).
+###
+### IMPORTANTE sobre @runId: NO uses {{$guid}} para el username si vas a referenciarlo
+### en mas de un bloque (ej. registrar en 1.1 y loguear en 2.1) - REST Client vuelve a
+### evaluar las variables dinamicas ($guid, $randomInt, $timestamp) CADA VEZ que se
+### referencian, asi que "{{username}}" daria un valor distinto en cada bloque y el
+### login fallaria con INVALID_CREDENTIALS (el usuario del registro y el del login
+### terminan siendo nombres diferentes). Por eso @runId es un numero FIJO que TU
+### incrementas a mano cada vez que quieras re-ejecutar el archivo completo desde cero
+### (para no chocar con "username ya existe" de una corrida anterior).
 
 @baseUrl = http://localhost:8080
 @userPassword = Test1234!
-@username = user-{{$guid}}
-@otherUsername = other-{{$guid}}
+@runId = 1
+@username = user-{{runId}}
+@otherUsername = other-{{runId}}
 
 
 ###############################################################################
